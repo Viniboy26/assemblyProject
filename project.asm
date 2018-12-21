@@ -15,6 +15,12 @@ GAMEHEIGHT	EQU 150
 INVWIDTH	EQU 320
 INVHEIGHT	EQU 50
 
+STILL		EQU	0
+LEFT		EQU 1
+RIGHT		EQU 2
+UP			EQU 3
+DOWN		EQU 4
+
 
 ; Indexes of character information in "gamedata" array
 CHARXPOS	EQU 1	; character begin x-position
@@ -448,6 +454,132 @@ PROC drawNSprites
 	ret
 ENDP drawNSprites
 
+PROC drawSprites
+	ARG		@@data:dword, @@sprite:dword
+	USES	eax, ebx, ecx, edx, edi
+	
+	xor ecx, ecx
+	
+	
+	mov edi, [@@data]	; store the data array in edi
+	mov cl, [edi]		; store the number of elements in ecx
+	add edi, 4
+	
+	xor eax,eax
+	xor ebx,ebx
+	@@foreach:
+			push ecx
+			mov cl, [edi]
+			cmp cl, 0			; test if the element must be drawn
+			je @@aliveBreak
+			
+			inc edi
+			mov eax, [edi]	; the x position in eax
+			inc edi
+			mov ebx, [edi]	; the y position in ebx
+			; draw the sprite
+			call	drawSprite, eax, ebx, [@@sprite], offset screenBuffer
+			
+			inc edi
+			mov al, [edi]	; the direction in eax
+			
+			jmp @@tests			
+			
+			@@endTests:
+			inc edi
+			jmp @@continue
+			
+			@@aliveBreak:
+			add edi,4   	; we still need to add 4 to go to the next element
+			@@continue:
+			pop ecx
+			loop @@foreach
+			jmp @@return
+			
+	@@tests:
+		cmp eax, 0
+		je @@endTests
+	
+		cmp eax, 1	; test if it needs to go left
+		je @@moveLeft
+			
+		cmp eax, 2	; test if it needs to go right
+		je @@moveRight
+			
+		cmp eax, 3		; test if it needs to go up
+		je @@moveUp
+			
+		cmp eax, 4	; test if it needs to go down
+		je @@moveDown
+		
+		jmp @@endTests
+			
+		@@moveLeft:
+			push edi
+			sub edi, 2				; store the x position of the object in edi
+			call moveObject, edi, 0	; 0 means decreasing
+			pop edi
+			jmp @@endTests
+				
+		@@moveRight:
+			push edi
+			sub edi, 2				; store the x position of the object in edi	
+			call moveObject, edi, 1	; 1 means increase
+			pop edi
+			jmp @@endTests
+				
+		@@moveUp:
+			push edi
+			dec edi					; store the y position of the object in edi
+			call moveObject, edi, 0	; 0 means decreasing
+			pop edi
+			jmp @@endTests
+				
+		@@moveDown:
+			push edi
+			dec edi					; store the y position of the object in edi
+			call moveObject, edi, 1	; 1 means increasing
+			pop edi
+			jmp @@endTests
+	
+	@@return:
+	ret
+ENDP drawSprites
+
+
+
+PROC moveObject
+	ARG		@@data:dword, @@increase:byte
+	USES	eax, ebx, ecx
+	
+	xor eax,eax
+	xor ecx,ecx
+	mov ebx, [@@data]		
+	mov eax, [ebx]			; eax is the position that needs to be changed
+	movzx ecx, [@@increase]	; ecx is the increasing boolean
+	
+	cmp ecx, 1
+	je @@increaseValue
+	
+	cmp ecx, 0
+	je @@decreaseValue
+	
+	jmp @@return
+	
+	@@increaseValue:
+		add eax, 4
+		mov [ebx], eax 		; replace the position with the new value
+		jmp @@return
+		
+	@@decreaseValue:
+		sub eax, 4
+		mov [ebx], eax		; replace the position with the new value
+		jmp @@return
+		
+	@@return:
+	ret
+ENDP moveObject
+
 ;; MAIN method
 
 PROC main
@@ -476,6 +608,10 @@ PROC main
 	call 	drawNSprites, 2, 2, edx, 2, offset heart
 	
 	call	drawBackground
+	
+	;call	drawSprite, 50, 100, offset stone, offset screenBuffer
+	
+	call	drawSprites, offset projectiles, offset stone
 	
 	; Draw character
 	call testBoarders, offset character
@@ -509,16 +645,29 @@ DATASEG
 	keybscancodes 	db 29h, 02h, 03h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 	52h, 47h, 49h, 	45h, 35h, 2FH, 4Ah
 					db 0Fh, 10h, 11h, 12h, 13h, 14h, 15h, 16h, 17h, 18h, 19h, 1Ah, 1Bh, 		53h, 4Fh, 51h, 	47h, 48h, 49h, 		1Ch, 4Eh
 					db 3Ah, 1Eh, 1Fh, 20h, 21h, 22h, 23h, 24h, 25h, 26h, 27h, 28h, 2Bh,    						4Bh, 4Ch, 4Dh
-					db 2Ah, 2FH, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
+					db 2Ah, 00H, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
 					db 1Dh, 0h, 38h,  				39h,  				0h, 0h, 0h, 1Dh,  		4Bh, 50h, 4Dh,  52h, 53h
+					
 	gamelen			dd	6	; length of gamedata array
 	gamedata		dd	150 ; character x-position
 					dd	170 ; character y-position
 					dd 	3	; number of lives
 					dd	100
 					dd	80
+					dd  0   ; number of projectiles alive
 					
-	
+	projectiles		DW 10, 4
+					; alive,xpos,ypos,direction
+					DB 0   ,0   ,0   ,0
+					DB 0   ,0   ,0   ,0
+					DB 0   ,0   ,0   ,0
+					DB 0   ,0   ,0   ,0	
+					DB 0   ,0   ,0   ,0
+					DB 0   ,0   ,0   ,0
+					DB 0   ,0   ,0   ,0
+					DB 0   ,0   ,0   ,0
+					DB 0   ,0   ,0   ,0
+					DB 0   ,0   ,0   ,0
 					
 	background	DW 32, 25
 				DB 06H,06H,06H,06H,06H,06H,06H,06H,70H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
@@ -574,32 +723,32 @@ DATASEG
 				DB 02H, 03H, 08H, 07H, 02H, 04H, 04H, 04H, 54H, 04H, 05H, 04H, 64H, 04H, 04H, 04H, 54H, 04H, 45H, 04H, 04H, 04H, 05H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H
 				DB 02H, 03H, 08H, 07H, 02H, 04H, 04H, 04H, 54H, 04H, 05H, 04H, 64H, 04H, 04H, 04H, 54H, 04H, 45H, 04H, 04H, 04H, 05H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H
 				
-	character	DW 25, 25
-				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,00H,00H,00H,00H,00H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH,2FH
-				DB 2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH
-				DB 2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH
-				DB 2FH,00H,57H,57H,00H,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H,00H,57H,57H,00H,2FH
-				DB 2FH,00H,57H,00H,1FH,1FH,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,00H,1FH,1FH,00H,00H,00H,57H,00H,2FH
-				DB 2FH,00H,57H,00H,1FH,1FH,00H,00H,00H,57H,57H,00H,00H,00H,57H,57H,00H,1FH,1FH,00H,00H,00H,57H,00H,2FH
-				DB 2FH,00H,40H,00H,00H,00H,00H,00H,00H,57H,00H,00H,00H,00H,00H,57H,00H,00H,00H,00H,00H,00H,57H,00H,2FH
-				DB 2FH,00H,40H,40H,00H,00H,00H,00H,57H,57H,00H,1FH,1FH,1FH,00H,57H,57H,00H,00H,00H,00H,57H,57H,00H,2FH
-				DB 2FH,2FH,00H,40H,4EH,4EH,4EH,57H,57H,57H,00H,00H,00H,00H,00H,57H,57H,57H,4EH,4EH,4EH,57H,00H,2FH,2FH
-				DB 2FH,2FH,2FH,00H,4EH,4EH,4EH,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,4EH,4EH,4EH,00H,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,00H,00H,4EH,4EH,57H,57H,57H,57H,57H,57H,57H,57H,57H,4EH,4EH,00H,00H,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,41H,41H,41H,41H,41H,41H,41H,41H,41H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,2FH,2FH,40H,40H,00H,00H,00H,00H,00H,00H,00H,00H,00H,40H,40H,2FH,2FH,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,2FH,57H,57H,57H,40H,40H,40H,40H,40H,40H,40H,40H,40H,57H,57H,57H,00H,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH,2FH
-				DB 2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH
-				DB 2FH,2FH,00H,57H,57H,57H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,57H,57H,57H,00H,2FH,2FH
-				DB 2FH,2FH,00H,00H,40H,40H,00H,57H,57H,57H,57H,57H,00H,57H,57H,57H,57H,57H,00H,40H,40H,00H,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,00H,00H,00H,57H,57H,57H,57H,57H,00H,57H,57H,57H,57H,57H,00H,00H,00H,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,57H,57H,57H,57H,00H,57H,57H,57H,57H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,57H,57H,57H,00H,57H,57H,57H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
-				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,00H,2FH,00H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+	character	DW 23, 25
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,00H,00H,00H,00H,00H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,2FH,2FH,2FH
+				DB 2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH
+				DB 2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH
+				DB 00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H
+				DB 00H,57H,57H,00H,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H,00H,57H,57H,00H
+				DB 00H,57H,00H,1FH,1FH,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,00H,1FH,1FH,00H,00H,00H,57H,00H
+				DB 00H,57H,00H,1FH,1FH,00H,00H,00H,57H,57H,00H,00H,00H,57H,57H,00H,1FH,1FH,00H,00H,00H,57H,00H
+				DB 00H,40H,00H,00H,00H,00H,00H,00H,57H,00H,00H,00H,00H,00H,57H,00H,00H,00H,00H,00H,00H,57H,00H
+				DB 00H,40H,40H,00H,00H,00H,00H,57H,57H,00H,1FH,1FH,1FH,00H,57H,57H,00H,00H,00H,00H,57H,57H,00H
+				DB 2FH,00H,40H,4EH,4EH,4EH,57H,57H,57H,00H,00H,00H,00H,00H,57H,57H,57H,4EH,4EH,4EH,57H,00H,2FH
+				DB 2FH,2FH,00H,4EH,4EH,4EH,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,4EH,4EH,4EH,00H,2FH,2FH
+				DB 2FH,2FH,2FH,00H,00H,4EH,4EH,57H,57H,57H,57H,57H,57H,57H,57H,57H,4EH,4EH,00H,00H,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,00H,00H,41H,41H,41H,41H,41H,41H,41H,41H,41H,00H,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,40H,40H,00H,00H,00H,00H,00H,00H,00H,00H,00H,40H,40H,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,57H,57H,57H,40H,40H,40H,40H,40H,40H,40H,40H,40H,57H,57H,57H,00H,2FH,2FH,2FH
+				DB 2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH
+				DB 2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH
+				DB 2FH,00H,57H,57H,57H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,57H,57H,57H,00H,2FH
+				DB 2FH,00H,00H,40H,40H,00H,57H,57H,57H,57H,57H,00H,57H,57H,57H,57H,57H,00H,40H,40H,00H,2FH,2FH
+				DB 2FH,2FH,2FH,00H,00H,00H,57H,57H,57H,57H,57H,00H,57H,57H,57H,57H,57H,00H,00H,00H,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,00H,57H,57H,57H,57H,00H,57H,57H,57H,57H,00H,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,57H,57H,57H,00H,57H,57H,57H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,00H,2FH,00H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
 				
 	heart		DW 10, 10
 				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
@@ -613,8 +762,12 @@ DATASEG
 				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
 				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
 				
-	stone		DB 5,5
-				DB 2FH,2FH
+	stone		DW 6,5
+				DB 2FH,00H,00H,00H,00H,2FH
+				DB 00H,18H,18H,18H,18H,00H
+				DB 00H,18H,18H,18H,18H,00H
+				DB 00H,18H,18H,18H,18H,00H
+				DB 2FH,00H,00H,00H,00H,2FH
 				
 ; -------------------------------------------------------------------
 
