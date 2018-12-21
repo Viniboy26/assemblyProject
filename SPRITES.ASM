@@ -10,9 +10,22 @@ SCRHEIGHT EQU 200	; screen height
 include "sprites.inc"
 
 CODESEG
+	
+PROC updateVideoBuffer
+	ARG @@buffer:dword
+	USES ecx,edi,esi
+	
+	cld
+	mov esi, [@@buffer]
+	mov edi, VMEMADR
+	mov ecx, 64000 / 4
+	rep movsd
+	
+	ret
+ENDP updateVideoBuffer
 
 PROC drawSprite
-	ARG		@@xpos:word, @@ypos:word, @@index:word, @@sprite:dword
+	ARG		@@xpos:word, @@ypos:word, @@sprite:dword, @@buffer:dword
 	USES 	eax,ebx,ecx,edx,edi,esi,ebp
 	
 	; Get the top left corner of the sprite's index
@@ -21,9 +34,10 @@ PROC drawSprite
 	mul edx
 	add	ax, [@@xpos]
 	
+	cld
 	; Get the adress of the top left corner
-	mov edi, VMEMADR
-	add edi, eax				; the position where the sprite needs to be drawn is now stored in edi
+	mov edi, [@@buffer]	; the adress of the screen Buffer
+	add edi, eax					; the position where the sprite needs to be drawn is now stored in edi
 	
 	xor eax,eax
 	xor ecx,ecx
@@ -53,7 +67,10 @@ PROC drawSprite
 			push eax
 			;sub eax, 1
 			mov al, [ebx]
+			cmp al, 2fh
+			je @@skipColor	; skips the 2fh color
 			mov [edi], al
+			@@skipColor:
 			pop eax
 			sub eax, 1		; lower the eax register by 1
 			cmp eax, 0		; test if eax is 0, if so, go out of the loop, else, continue the loop
@@ -74,7 +91,7 @@ PROC drawSprite
 	ret
 ENDP drawSprite
 
-DATASEG
+UDATASEG
 	
 STACK 100h
 
