@@ -7,9 +7,14 @@ INCLUDE "keyb.inc"
 INCLUDE "sprites.inc"
 
 ; compile-time constants (with macros)
-VMEMADR EQU 0A0000h	; video memory address
-SCRWIDTH EQU 320	; screen width
-SCRHEIGHT EQU 200	; screen height
+VMEMADR		EQU 0A0000h	; video memory address
+SCRWIDTH	EQU 320		; screen width
+SCRHEIGHT	EQU 200		; screen height
+GAMEWIDTH	EQU 320
+GAMEHEIGHT	EQU 150
+INVWIDTH	EQU 320
+INVHEIGHT	EQU 50
+
 
 ; Indexes of character information in "gamedata" array
 CHARXPOS	EQU 1	; character begin x-position
@@ -138,6 +143,7 @@ PROC decreaseHealth
 	call getGamedataElement, CHARLIVES
 	dec edx
 	call setGamedataElement, CHARLIVES, edx
+	call fillBackground, 0
 	ret
 ENDP decreaseHealth
 
@@ -156,11 +162,11 @@ PROC moveCharacter
 	jmp @@decrease
 	
 @@increase:
-	add edx, 3
+	add edx, 5
 	jmp @@return
 	
 @@decrease:
-	sub edx, 3
+	sub edx, 5
 	
 @@return:
 	call setGamedataElement, [@@POS], edx
@@ -199,7 +205,7 @@ PROC testBoarders
 	jle	@@setToLeftScreen
 	;mov ebx, offset character 
 	add edx, CHARWIDTH
-	cmp edx, SCRWIDTH
+	cmp edx, GAMEWIDTH
 	jge @@setToRightScreen
 	
 	jmp @@testYPOS
@@ -209,23 +215,24 @@ PROC testBoarders
 	jmp @@testYPOS
 	
 @@setToRightScreen:
-	mov eax, SCRWIDTH
+	mov eax, GAMEWIDTH
 	sub eax, CHARWIDTH
 	call setGamedataElement, CHARXPOS, eax
 	jmp @@testYPOS
 	
 @@testYPOS:
 	call getGamedataElement, CHARYPOS
-	cmp edx, 0
+	cmp edx, INVHEIGHT
 	jle @@setToTopScreen
 	add edx, CHARHEIGHT
+	;add edx, INVHEIGHT
 	cmp edx, SCRHEIGHT
 	jge @@setToBottomScreen
 	
 	jmp @@return
 	
 @@setToTopScreen:
-	call setGamedataElement, CHARYPOS, 0
+	call setGamedataElement, CHARYPOS, INVHEIGHT
 	jmp @@return
 	
 @@setToBottomScreen:
@@ -410,7 +417,7 @@ PROC drawBackground
 	
 	mov ebx, 10		;eax ; store the number of cols in ebx
 	
-	mov eax, 0		; eax will be every y position
+	mov eax, 50		; eax will be every y position
 	@@rowLoop:
 		call drawNSprites, 0, eax, ebx, 0, offset background
 		add eax, GRIDHEIGHT 
@@ -462,29 +469,28 @@ PROC main
 	call	getGamedataElement, ENEMY1XPOS
 	mov eax, edx
 	call	getGamedataElement, ENEMY1YPOS
-	;call	drawRectangle, eax, edx, CHARWIDTH, CHARHEIGHT, 30
-	;call	drawSprite, eax, edx, offset background
 	
-	;call	drawBackground
+	call 	getGamedataElement, CHARLIVES
+	cmp edx, 0
+	je @@gameover
+	call 	drawNSprites, 2, 2, edx, 0, offset heart
+	
+	call	drawBackground
 	
 	; Draw character
 	call testBoarders
 	call	getGamedataElement, CHARXPOS
 	mov eax, edx
 	call	getGamedataElement, CHARYPOS
-	;call	drawRectangle, eax, edx, CHARWIDTH, CHARHEIGHT, CHARCOLOR
 	call	drawSprite, eax, edx, offset character
 	;call	followChar, eax, edx
-
 	
 	; Test if character is alive
 	call getGamedataElement, CHARLIVES ; store the number of lives in edx
 	cmp edx, 0 ; compare the number of lives to 0
 	je @@gameover
 	
-	
-	
-	call 	wait_VBLANK, 1
+	call 	wait_VBLANK, 2
 	
 	;; Jump back to the gameloop
 	jmp @@gameloop
@@ -590,6 +596,18 @@ DATASEG
 				DB 00H,00H,00H,00H,00H,00H,00H,00H,57H,57H,57H,57H,00H,57H,57H,57H,57H,00H,00H,00H,00H,00H,00H,00H,00H
 				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,57H,57H,57H,00H,57H,57H,57H,00H,00H,00H,00H,00H,00H,00H,00H,00H
 				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
+				
+	heart		DW 10, 10
+				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
+				DB 00H,00H,04H,04H,00H,00H,04H,04H,00H,00H
+				DB 00H,04H,04H,04H,04H,04H,04H,04H,04H,00H
+				DB 00H,04H,04H,04H,04H,04H,04H,04H,04H,00H
+				DB 00H,04H,04H,04H,04H,04H,04H,04H,04H,00H
+				DB 00H,00H,04H,04H,04H,04H,04H,04H,00H,00H
+				DB 00H,00H,00H,04H,04H,04H,04H,00H,00H,00H
+				DB 00H,00H,00H,00H,04H,04H,00H,00H,00H,00H
+				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
+				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
 				
 ; -------------------------------------------------------------------
 
