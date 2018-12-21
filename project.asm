@@ -7,7 +7,7 @@ INCLUDE "keyb.inc"
 INCLUDE "sprites.inc"
 
 ; compile-time constants (with macros)
-VMEMADR		EQU 0A0000h	; video memory address
+VMEMADR		EQU 0A002FH	; video memory address
 SCRWIDTH	EQU 320		; screen width
 SCRHEIGHT	EQU 200		; screen height
 GAMEWIDTH	EQU 320
@@ -50,7 +50,7 @@ PROC fillBackground
 	USES 	eax, ecx, edi
 
 	; Initialize video memory address.
-	mov	edi, VMEMADR
+	mov	edi, offset screenBuffer
 	
 	; copy color value across all bytes of eax
 	mov al, [@@fillcolor]	; ???B
@@ -143,7 +143,7 @@ PROC decreaseHealth
 	call getGamedataElement, CHARLIVES
 	dec edx
 	call setGamedataElement, CHARLIVES, edx
-	call fillBackground, 0
+	;call fillBackground, 0
 	ret
 ENDP decreaseHealth
 
@@ -198,13 +198,19 @@ PROC moveDown
 ENDP moveDown
 
 PROC testBoarders
-	USES edx, eax;, ebx
+	ARG @@sprite:dword
+	USES edx, eax, ebx, ecx, edi
+	
+	xor ecx, ecx
+	xor edi, edi
+	mov edi, [@@sprite]	; character
+	mov cl, [edi]		; character-width  (stored in ecx)
+	mov al, [edi + 2]	; character-height (stored in edx)
 	
 	call getGamedataElement, CHARXPOS
 	cmp	edx, 0
 	jle	@@setToLeftScreen
-	;mov ebx, offset character 
-	add edx, CHARWIDTH
+	add edx, ecx
 	cmp edx, GAMEWIDTH
 	jge @@setToRightScreen
 	
@@ -215,16 +221,16 @@ PROC testBoarders
 	jmp @@testYPOS
 	
 @@setToRightScreen:
-	mov eax, GAMEWIDTH
-	sub eax, CHARWIDTH
-	call setGamedataElement, CHARXPOS, eax
+	mov ebx, GAMEWIDTH
+	sub ebx, ecx
+	call setGamedataElement, CHARXPOS, ebx
 	jmp @@testYPOS
 	
 @@testYPOS:
 	call getGamedataElement, CHARYPOS
 	cmp edx, INVHEIGHT
 	jle @@setToTopScreen
-	add edx, CHARHEIGHT
+	add edx, eax
 	;add edx, INVHEIGHT
 	cmp edx, SCRHEIGHT
 	jge @@setToBottomScreen
@@ -236,9 +242,9 @@ PROC testBoarders
 	jmp @@return
 	
 @@setToBottomScreen:
-	mov eax, SCRHEIGHT
-	sub eax, CHARHEIGHT
-	call setGamedataElement, CHARYPOS, eax
+	mov ebx, SCRHEIGHT
+	sub ebx, eax
+	call setGamedataElement, CHARYPOS, ebx
 	jmp @@return
 	
 @@return:
@@ -351,7 +357,7 @@ endp wait_VBLANK
 PROC terminateProcess
 	USES eax
 	call setVideoMode, 03h
-	mov	ax,04C00h
+	mov	ax,04C2FH
 	int 21h
 	ret
 ENDP terminateProcess
@@ -403,24 +409,19 @@ PROC followChar
 ENDP followChar
 
 PROC drawBackground
-	USES eax, ebx, ecx, edx
+	USES eax, ebx, ecx, edx, edi
 	
-	;mov edx, SCRHEIGHT
-	;mov ebx, GRIDHEIGHT
-	;div ebx
+	xor ecx,ecx
+	xor ebx,ebx
+	xor eax,eax
+	xor edi,edi
 	
-	mov ecx, 8		;eax ; store the number of rows in ecx
+	mov ebx, 50
+	mov ecx, 6		; store the number of rows in ecx
 	
-	;mov edx, SCRWIDTH
-	;mov ebx, GRIDWIDTH
-	;div ebx
-	
-	mov ebx, 10		;eax ; store the number of cols in ebx
-	
-	mov eax, 50		; eax will be every y position
 	@@rowLoop:
-		call drawNSprites, 0, eax, ebx, 0, offset background
-		add eax, GRIDHEIGHT 
+		call drawNSprites, 0, ebx, 10, 0, offset background
+		add ebx, 25
 		loop @@rowLoop
 		
 	ret
@@ -439,14 +440,13 @@ PROC drawNSprites
 	movzx ecx, [@@nSprites]		; total sprites to print
 	
 	@loop:
-		call drawSprite, ebx, edx, [@@sprite]
+		call drawSprite, ebx, edx, [@@sprite], offset screenBuffer
 		add ebx, [edi]
 		add ebx, eax
 		loop @loop
 		
 	ret
 ENDP drawNSprites
-	
 
 ;; MAIN method
 
@@ -463,7 +463,7 @@ PROC main
 	
 @@gameloop:
 	call 	keyboardFunction
-	;call	fillBackground, 0
+	call	fillBackground, 0
 	
 	; Draw Enemy
 	call	getGamedataElement, ENEMY1XPOS
@@ -473,24 +473,26 @@ PROC main
 	call 	getGamedataElement, CHARLIVES
 	cmp edx, 0
 	je @@gameover
-	call 	drawNSprites, 2, 2, edx, 0, offset heart
+	call 	drawNSprites, 2, 2, edx, 2, offset heart
 	
 	call	drawBackground
 	
 	; Draw character
-	call testBoarders
+	call testBoarders, offset character
 	call	getGamedataElement, CHARXPOS
 	mov eax, edx
 	call	getGamedataElement, CHARYPOS
-	call	drawSprite, eax, edx, offset character
+	call	drawSprite, eax, edx, offset character, offset screenBuffer
 	;call	followChar, eax, edx
+	
+	call updateVideoBuffer, offset screenBuffer
 	
 	; Test if character is alive
 	call getGamedataElement, CHARLIVES ; store the number of lives in edx
 	cmp edx, 0 ; compare the number of lives to 0
 	je @@gameover
 	
-	call 	wait_VBLANK, 2
+	call 	wait_VBLANK, 1
 	
 	;; Jump back to the gameloop
 	jmp @@gameloop
@@ -504,10 +506,10 @@ ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
-	keybscancodes 	db 29h, 02h, 03h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 	52h, 47h, 49h, 	45h, 35h, 00h, 4Ah
+	keybscancodes 	db 29h, 02h, 03h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 	52h, 47h, 49h, 	45h, 35h, 2FH, 4Ah
 					db 0Fh, 10h, 11h, 12h, 13h, 14h, 15h, 16h, 17h, 18h, 19h, 1Ah, 1Bh, 		53h, 4Fh, 51h, 	47h, 48h, 49h, 		1Ch, 4Eh
 					db 3Ah, 1Eh, 1Fh, 20h, 21h, 22h, 23h, 24h, 25h, 26h, 27h, 28h, 2Bh,    						4Bh, 4Ch, 4Dh
-					db 2Ah, 00h, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
+					db 2Ah, 2FH, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
 					db 1Dh, 0h, 38h,  				39h,  				0h, 0h, 0h, 1Dh,  		4Bh, 50h, 4Dh,  52h, 53h
 	gamelen			dd	6	; length of gamedata array
 	gamedata		dd	150 ; character x-position
@@ -515,6 +517,8 @@ DATASEG
 					dd 	3	; number of lives
 					dd	100
 					dd	80
+					
+	
 					
 	background	DW 32, 25
 				DB 06H,06H,06H,06H,06H,06H,06H,06H,70H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
@@ -571,52 +575,57 @@ DATASEG
 				DB 02H, 03H, 08H, 07H, 02H, 04H, 04H, 04H, 54H, 04H, 05H, 04H, 64H, 04H, 04H, 04H, 54H, 04H, 45H, 04H, 04H, 04H, 05H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H
 				
 	character	DW 25, 25
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H,00H
-				DB 00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H
-				DB 00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H
-				DB 00H,00H,57H,57H,00H,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H,00H,57H,57H,00H,00H
-				DB 00H,00H,57H,00H,1FH,1FH,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,00H,1FH,1FH,00H,00H,00H,57H,00H,00H
-				DB 00H,00H,57H,00H,1FH,1FH,00H,00H,00H,57H,57H,00H,00H,00H,57H,57H,00H,1FH,1FH,00H,00H,00H,57H,00H,00H
-				DB 00H,00H,40H,00H,00H,00H,00H,00H,00H,57H,00H,00H,00H,00H,00H,57H,00H,00H,00H,00H,00H,00H,57H,00H,00H
-				DB 00H,00H,40H,40H,00H,00H,00H,00H,57H,57H,00H,1FH,1FH,1FH,00H,57H,57H,00H,00H,00H,00H,57H,57H,00H,00H
-				DB 00H,00H,00H,40H,4EH,4EH,4EH,57H,57H,57H,00H,00H,00H,00H,00H,57H,57H,57H,4EH,4EH,4EH,57H,00H,00H,00H
-				DB 00H,00H,00H,00H,4EH,4EH,4EH,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,4EH,4EH,4EH,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,4EH,4EH,57H,57H,57H,57H,57H,57H,57H,57H,57H,4EH,4EH,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,41H,41H,41H,41H,41H,41H,41H,41H,41H,00H,00H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,40H,40H,00H,00H,00H,00H,00H,00H,00H,00H,00H,40H,40H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,57H,57H,57H,40H,40H,40H,40H,40H,40H,40H,40H,40H,57H,57H,57H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H,00H
-				DB 00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H
-				DB 00H,00H,00H,57H,57H,57H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,57H,57H,57H,00H,00H,00H
-				DB 00H,00H,00H,00H,40H,40H,00H,57H,57H,57H,57H,57H,00H,57H,57H,57H,57H,57H,00H,40H,40H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,00H,57H,57H,57H,57H,57H,00H,57H,57H,57H,57H,57H,00H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,57H,57H,57H,57H,00H,57H,57H,57H,57H,00H,00H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,57H,57H,57H,00H,57H,57H,57H,00H,00H,00H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,00H,00H,00H,00H,00H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH,2FH
+				DB 2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH
+				DB 2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH
+				DB 2FH,00H,57H,57H,00H,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,00H,00H,57H,57H,00H,2FH
+				DB 2FH,00H,57H,00H,1FH,1FH,00H,00H,00H,57H,57H,57H,57H,57H,57H,57H,00H,1FH,1FH,00H,00H,00H,57H,00H,2FH
+				DB 2FH,00H,57H,00H,1FH,1FH,00H,00H,00H,57H,57H,00H,00H,00H,57H,57H,00H,1FH,1FH,00H,00H,00H,57H,00H,2FH
+				DB 2FH,00H,40H,00H,00H,00H,00H,00H,00H,57H,00H,00H,00H,00H,00H,57H,00H,00H,00H,00H,00H,00H,57H,00H,2FH
+				DB 2FH,00H,40H,40H,00H,00H,00H,00H,57H,57H,00H,1FH,1FH,1FH,00H,57H,57H,00H,00H,00H,00H,57H,57H,00H,2FH
+				DB 2FH,2FH,00H,40H,4EH,4EH,4EH,57H,57H,57H,00H,00H,00H,00H,00H,57H,57H,57H,4EH,4EH,4EH,57H,00H,2FH,2FH
+				DB 2FH,2FH,2FH,00H,4EH,4EH,4EH,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,4EH,4EH,4EH,00H,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,00H,00H,4EH,4EH,57H,57H,57H,57H,57H,57H,57H,57H,57H,4EH,4EH,00H,00H,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,41H,41H,41H,41H,41H,41H,41H,41H,41H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,40H,40H,00H,00H,00H,00H,00H,00H,00H,00H,00H,40H,40H,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,57H,57H,57H,40H,40H,40H,40H,40H,40H,40H,40H,40H,57H,57H,57H,00H,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH,2FH
+				DB 2FH,2FH,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,2FH,2FH
+				DB 2FH,2FH,00H,57H,57H,57H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,57H,57H,57H,00H,2FH,2FH
+				DB 2FH,2FH,00H,00H,40H,40H,00H,57H,57H,57H,57H,57H,00H,57H,57H,57H,57H,57H,00H,40H,40H,00H,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,00H,00H,00H,57H,57H,57H,57H,57H,00H,57H,57H,57H,57H,57H,00H,00H,00H,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,57H,57H,57H,57H,00H,57H,57H,57H,57H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,57H,57H,57H,00H,57H,57H,57H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,00H,2FH,00H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
 				
 	heart		DW 10, 10
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,04H,04H,00H,00H,04H,04H,00H,00H
-				DB 00H,04H,04H,04H,04H,04H,04H,04H,04H,00H
-				DB 00H,04H,04H,04H,04H,04H,04H,04H,04H,00H
-				DB 00H,04H,04H,04H,04H,04H,04H,04H,04H,00H
-				DB 00H,00H,04H,04H,04H,04H,04H,04H,00H,00H
-				DB 00H,00H,00H,04H,04H,04H,04H,00H,00H,00H
-				DB 00H,00H,00H,00H,04H,04H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
-				DB 00H,00H,00H,00H,00H,00H,00H,00H,00H,00H
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,04H,04H,2FH,2FH,04H,04H,2FH,2FH
+				DB 2FH,04H,04H,04H,04H,04H,04H,04H,04H,2FH
+				DB 2FH,04H,04H,04H,04H,04H,04H,04H,04H,2FH
+				DB 2FH,04H,04H,04H,04H,04H,04H,04H,04H,2FH
+				DB 2FH,2FH,04H,04H,04H,04H,04H,04H,2FH,2FH
+				DB 2FH,2FH,2FH,04H,04H,04H,04H,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,04H,04H,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
+				
+	stone		DB 5,5
+				DB 2FH,2FH
 				
 ; -------------------------------------------------------------------
 
 ; -------------------------------------------------------------------
 UDATASEG
 	palette		db 768 dup (?)
+	
+	screenBuffer db 64000 dup (?) 
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
-STACK 100h
+STACK 12FH
 
 END main
