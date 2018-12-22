@@ -338,23 +338,26 @@ PROC selectOption
 	ARG	@@darray:dword, @@option:byte ;  option = 0 or 1, according to if we want to de- or increase the value in darray
 	USES eax, ebx, ecx
 	
+	xor ecx, ecx
+	
 	mov ebx, [@@darray]	; pointer to option
-	mov ecx, [ebx]			; option
+	mov cl, [ebx]		; option
 	
 	cmp [@@option], 0
 	jg @@nextOption
 	jmp @@priorOption
 	
 	@@nextOption:
-		inc ecx
+		inc cl
 		jmp @@setOption
 	
 	@@priorOption:
-		dec ecx
+		dec cl
 	
 	@@setOption:
-		xchg eax, ecx
-		mov [ebx], eax
+		xor eax, eax
+		xchg al, cl
+		mov [ebx], al
 	
 	ret
 ENDP selectOption
