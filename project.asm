@@ -36,6 +36,10 @@ GRIDHEIGHT	EQU 25	; height of the grid
 
 KEYCNT EQU 89		; number of keys to track
 
+; Menu options
+START	EQU 1
+EXIT	EQU 2
+
 ; -------------------------------------------------------------------
 CODESEG
 
@@ -133,9 +137,9 @@ PROC setGamedataElement
 	mov ebx, offset gamelen
 	mov ecx, [@@index]
 	
-@@getToIndex:
-	add ebx, 4	; go to next element
-	loop @@getToIndex ; loop until the correct index is reached
+	@@getToIndex:
+		add ebx, 4	; go to next element
+		loop @@getToIndex ; loop until the correct index is reached
 	
 	xchg ecx, [@@newvalue]
 	mov [ebx], ecx
@@ -167,16 +171,16 @@ PROC moveCharacter
 	jg @@increase
 	jmp @@decrease
 	
-@@increase:
-	add edx, 5
-	jmp @@return
+	@@increase:
+		add edx, 5
+		jmp @@return
 	
-@@decrease:
-	sub edx, 5
+	@@decrease:
+		sub edx, 5
 	
-@@return:
-	call setGamedataElement, [@@POS], edx
-	ret
+	@@return:
+		call setGamedataElement, [@@POS], edx
+		ret
 ENDP moveCharacter
 
 ; Move to the right
@@ -222,46 +226,154 @@ PROC testBoarders
 	
 	jmp @@testYPOS
 	
-@@setToLeftScreen:
-	call setGamedataElement, CHARXPOS, 0
-	jmp @@testYPOS
+	@@setToLeftScreen:
+		call setGamedataElement, CHARXPOS, 0
+		jmp @@testYPOS
 	
-@@setToRightScreen:
-	mov ebx, GAMEWIDTH
-	sub ebx, ecx
-	call setGamedataElement, CHARXPOS, ebx
-	jmp @@testYPOS
+	@@setToRightScreen:
+		mov ebx, GAMEWIDTH
+		sub ebx, ecx
+		call setGamedataElement, CHARXPOS, ebx
+		jmp @@testYPOS
 	
-@@testYPOS:
-	call getGamedataElement, CHARYPOS
-	cmp edx, INVHEIGHT
-	jle @@setToTopScreen
-	add edx, eax
-	;add edx, INVHEIGHT
-	cmp edx, SCRHEIGHT
-	jge @@setToBottomScreen
+	@@testYPOS:
+		call getGamedataElement, CHARYPOS
+		cmp edx, INVHEIGHT
+		jle @@setToTopScreen
+		add edx, eax
+		;add edx, INVHEIGHT
+		cmp edx, SCRHEIGHT
+		jge @@setToBottomScreen
 	
-	jmp @@return
+		jmp @@return
 	
-@@setToTopScreen:
-	call setGamedataElement, CHARYPOS, INVHEIGHT
-	jmp @@return
+	@@setToTopScreen:
+		call setGamedataElement, CHARYPOS, INVHEIGHT
+		jmp @@return
 	
-@@setToBottomScreen:
-	mov ebx, SCRHEIGHT
-	sub ebx, eax
-	call setGamedataElement, CHARYPOS, ebx
-	jmp @@return
+	@@setToBottomScreen:
+		mov ebx, SCRHEIGHT
+		sub ebx, eax
+		call setGamedataElement, CHARYPOS, ebx
+		jmp @@return
 	
-@@return:
-	ret
+	@@return:
+		ret
 ENDP testBoarders
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Menu management
+
+PROC selectOption
+	ARG	@@darray:dword, @@option:dword ;  option = 0 or 1, according to if we want to de- or increase the value in darray
+	USES eax, ebx, ecx
+	
+	mov ebx, [@@darray]	; pointer to option
+	mov ecx, [ebx]			; option
+	
+	cmp [@@option], 0
+	jg @@nextOption
+	jmp @@priorOption
+	
+	@@nextOption:
+		inc ecx
+		jmp @@setOption
+	
+	@@priorOption:
+		dec ecx
+	
+	@@setOption:
+		xchg eax, ecx
+		mov [ebx], eax
+	
+	ret
+ENDP selectOption
+
+PROC startGame
+	call selectOption, offset gamestarted, 1
+	ret
+ENDP startGame
 
 ;;;;---------------------------------------------------------------------------------------------------
 
 ;; Keyboard management
 
-; Determines what to do when a certain key is pressed
+; Determines what to do when a certain key is pressed while in the menu
+PROC keyboardDuringMenu
+	USES ebx, ecx
+	
+	mov ecx, KEYCNT	; amount of keys to process
+	movzx ebx, [byte ptr offset keybscancodes + ecx - 1] ; get scancode
+	
+	; Test to see which key has been pressed
+	
+	; enter (select option)
+	mov bl, [offset __keyb_keyboardState + 1Ch]	; obtain corresponding key state
+	cmp bl, 1
+	je @@selectOption
+	
+	; up arrow
+	mov bl, [offset __keyb_keyboardState + 48h]	; obtain corresponding key state
+	cmp bl, 1
+	je @@priorOption
+	
+	; down arrow
+	mov bl, [offset __keyb_keyboardState + 50h]	; obtain corresponding key state
+	cmp bl, 1
+	je @@nextOption
+	
+	; If no key has been pressed, return without doing anything
+	jmp @@return
+	
+	; Consequences according to pressed key
+	
+	;;-----------------------------------------------
+	
+	; When enter is pressed
+	
+	@@selectOption:
+		mov ebx, [offset menuoption]	; get the current menu option, then proceed to test which one it is
+	
+		cmp ebx, START
+		je @@startGame
+	
+		cmp ebx, EXIT
+		je @@exit
+	
+		jmp @@return
+	
+	@@startGame:
+		call startGame
+		jmp @@return
+	
+	@@exit:
+		call __keyb_uninstallKeyboardHandler
+		call terminateProcess
+	
+	;;-----------------------------------------------
+	
+	; Other keys
+	
+	@@priorOption:
+		mov ebx, [offset menuoption]
+		cmp ebx, START	; test to see if we remain in amount of options boundary
+		je @@return		; if our current option is the first one we can't go to the prior option
+		call selectOption, offset menuoption, 0
+		jmp @@return
+	
+	@@nextOption:
+		mov ebx, [offset menuoption]
+		cmp ebx, EXIT	; test to see if we remain in amount of options boundary
+		je @@return		; if our current option is the last one we can't go to the next option
+		call selectOption, offset menuoption, 1
+		jmp @@return
+	
+	@@return:
+		ret
+ENDP keyboardDuringMenu
+
+; Determines what to do when a certain key is pressed during the game
 PROC keyboardFunction
 	USES	ebx, ecx
 	
@@ -305,32 +417,32 @@ PROC keyboardFunction
 	
 	; Consequences according to pressed key
 	
-@@escapeKey: 
-	call __keyb_uninstallKeyboardHandler
-	call terminateProcess
+	@@escapeKey: 
+		call __keyb_uninstallKeyboardHandler
+		call terminateProcess
 	
-@@moveRight:
-	call moveRight
-	jmp @@return
+	@@moveRight:
+		call moveRight
+		jmp @@return
 	
-@@moveLeft:
-	call moveLeft
-	jmp @@return
+	@@moveLeft:
+		call moveLeft
+		jmp @@return
 	
-@@moveUp:
-	call moveUp
-	jmp @@return
+	@@moveUp:
+		call moveUp
+		jmp @@return
 	
-@@moveDown:
-	call moveDown
-	jmp @@return
+	@@moveDown:
+		call moveDown
+		jmp @@return
 	
-@@decreaseHealth:
-	call decreaseHealth
-	jmp @@return
+	@@decreaseHealth:
+		call decreaseHealth
+		jmp @@return
 	
-@@return:
-	ret
+	@@return:
+		ret
 ENDP keyboardFunction
 
 ;;;;---------------------------------------------------------------------------------------------------
@@ -382,40 +494,40 @@ PROC followChar
 	
 	jmp @@ypostest
 	
-@@increasexpos:
-	inc edx
-	call setGamedataElement, ENEMY1XPOS, edx
-	jmp @@ypostest
+	@@increasexpos:
+		inc edx
+		call setGamedataElement, ENEMY1XPOS, edx
+		jmp @@ypostest
 	
-@@decreasexpos:
-	dec edx
-	call setGamedataElement, ENEMY1XPOS, edx
-	jmp @@ypostest
+	@@decreasexpos:
+		dec edx
+		call setGamedataElement, ENEMY1XPOS, edx
+		jmp @@ypostest
 	
-@@ypostest:
-	call getGamedataElement, ENEMY1YPOS
-	cmp edx, [@@ypos]
-	jl @@increaseypos
-	jg @@decreaseypos
+	@@ypostest:
+		call getGamedataElement, ENEMY1YPOS
+		cmp edx, [@@ypos]
+		jl @@increaseypos
+		jg @@decreaseypos
 	
-	jmp @@return
+		jmp @@return
 	
-@@increaseypos:
-	inc edx
-	call setGamedataElement, ENEMY1YPOS, edx
-	jmp @@return
+	@@increaseypos:
+		inc edx
+		call setGamedataElement, ENEMY1YPOS, edx
+		jmp @@return
 	
-@@decreaseypos:
-	dec edx
-	call setGamedataElement, ENEMY1YPOS, edx
-	jmp @@return
+	@@decreaseypos:
+		dec edx
+		call setGamedataElement, ENEMY1YPOS, edx
+		jmp @@return
 	
-@@return:
-	ret		
+	@@return:
+		ret		
 ENDP followChar
 
 PROC drawBackground
-	USES eax, ebx, ecx, edx, edi
+	USES 	eax, ebx, ecx, edx, edi
 	
 	xor ecx,ecx
 	xor ebx,ebx
@@ -435,7 +547,7 @@ ENDP drawBackground
 
 PROC drawNSprites
 	ARG		@@xpos:word, @@ypos:word, @@nSprites:word, @@gap:word, @@sprite:dword
-	USES eax, ebx, ecx, edx, edi
+	USES 	eax, ebx, ecx, edx, edi
 	
 	movzx ebx, [@@xpos]
 	movzx edx, [@@ypos]
@@ -593,55 +705,80 @@ PROC main
 	call	fillBackground, 0
 	call __keyb_installKeyboardHandler
 	
-@@gameloop:
-	call 	keyboardFunction
-	call	fillBackground, 0
+	@@menuloop:
+		; Draw the menu
+		call drawSprite, 0, 0, offset menu, offset screenBuffer
+		call updateVideoBuffer, offset screenBuffer
+		; Call the keyboard
+		call	keyboardDuringMenu
+		; Test to see if the game has started
+		mov eax, [offset gamestarted]
+		cmp eax, START
+		je @@leavemenu ; if the game started, leave the menu
 	
-	; Draw Enemy
-	call	getGamedataElement, ENEMY1XPOS
-	mov eax, edx
-	call	getGamedataElement, ENEMY1YPOS
+		jmp @@menuloop
 	
-	call 	getGamedataElement, CHARLIVES
-	cmp edx, 0
-	je @@gameover
-	call 	drawNSprites, 2, 2, edx, 2, offset heart
+		@@leavemenu:
+			jmp @@gameloop ; jump to the game
 	
-	call	drawBackground
+	@@gameloop:
+		call 	keyboardFunction
+		call	fillBackground, 0
 	
-	;call	drawSprite, 50, 100, offset stone, offset screenBuffer
+		; Draw Enemy
+		call	getGamedataElement, ENEMY1XPOS
+		mov eax, edx
+		call	getGamedataElement, ENEMY1YPOS
+		
+		; Check lives left
+		call 	getGamedataElement, CHARLIVES
+		cmp edx, 0
+		je @@returntomenu ; if lives = 0 return back to the menu
+		
+		call 	drawNSprites, 2, 2, edx, 2, offset heart
 	
-	call	drawSprites, offset projectiles, offset stone
+		call	drawBackground
 	
-	; Draw character
-	call testBoarders, offset character
-	call	getGamedataElement, CHARXPOS
-	mov eax, edx
-	call	getGamedataElement, CHARYPOS
-	call	drawSprite, eax, edx, offset character, offset screenBuffer
-	;call	followChar, eax, edx
+		;call	drawSprite, 50, 100, offset stone, offset screenBuffer
 	
-	call updateVideoBuffer, offset screenBuffer
+		call	drawSprites, offset projectiles, offset stone
 	
-	; Test if character is alive
-	call getGamedataElement, CHARLIVES ; store the number of lives in edx
-	cmp edx, 0 ; compare the number of lives to 0
-	je @@gameover
+		; Draw character
+		call testBoarders, offset character
+		call	getGamedataElement, CHARXPOS
+		mov eax, edx
+		call	getGamedataElement, CHARYPOS
+		call	drawSprite, eax, edx, offset character, offset screenBuffer
+		;call	followChar, eax, edx
 	
-	call 	wait_VBLANK, 1
+		call updateVideoBuffer, offset screenBuffer
 	
-	;; Jump back to the gameloop
-	jmp @@gameloop
+		call 	wait_VBLANK, 1
+	
+		;; Jump back to the gameloop
+		jmp @@gameloop
+		
+		
+	@@returntomenu:
+		call drawSprite, 0, 0, offset menu, offset screenBuffer
+		call updateVideoBuffer, offset screenBuffer
+		call setGamedataElement, CHARLIVES, 3 ; set lives to 3 again for the next game
+		call selectOption, offset gamestarted, 0 ; set boolean equal to 0 again
+		jmp @@menuloop	; jump back to the menu loop
 	
 
-@@gameover:
-	call __keyb_uninstallKeyboardHandler
-	call terminateProcess
+	@@gameover:
+		call __keyb_uninstallKeyboardHandler
+		call terminateProcess
 	
 ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
+	gamestarted		dd 0	; boolean to test if game has started
+
+	menuoption		dd 1	; holds the current menu option
+	
 	keybscancodes 	db 29h, 02h, 03h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 	52h, 47h, 49h, 	45h, 35h, 2FH, 4Ah
 					db 0Fh, 10h, 11h, 12h, 13h, 14h, 15h, 16h, 17h, 18h, 19h, 1Ah, 1Bh, 		53h, 4Fh, 51h, 	47h, 48h, 49h, 		1Ch, 4Eh
 					db 3Ah, 1Eh, 1Fh, 20h, 21h, 22h, 23h, 24h, 25h, 26h, 27h, 28h, 2Bh,    						4Bh, 4Ch, 4Dh
@@ -668,6 +805,33 @@ DATASEG
 					DB 0   ,0   ,0   ,0
 					DB 0   ,0   ,0   ,0
 					DB 0   ,0   ,0   ,0
+					
+	menu		DW 32, 25
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+				DB 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
 					
 	background	DW 32, 25
 				DB 06H,06H,06H,06H,06H,06H,06H,06H,70H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
