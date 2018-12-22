@@ -181,45 +181,45 @@ ENDP setPlayerData
 ;; Game data management
 
 ; Get the element on the specified index from the gamedata array
-PROC getGamedataElement
-	ARG		@@index:dword	RETURNS	edx
-	USES	ebx, ecx
+; PROC getGamedataElement
+	; ARG		@@index:dword	RETURNS	edx
+	; USES	ebx, ecx
 	
-	mov ebx, offset gamelen
-	mov ecx, [@@index]
+	; mov ebx, offset gamelen
+	; mov ecx, [@@index]
 	
-@@getToIndex:
-	add ebx, 4 	; go to next element
-	loop @@getToIndex ; loop until the correct index is reached
+; @@getToIndex:
+	; add ebx, 4 	; go to next element
+	; loop @@getToIndex ; loop until the correct index is reached
 	
-	mov edx, [ebx]
-	ret	
-ENDP getGamedataElement
+	; mov edx, [ebx]
+	; ret	
+; ENDP getGamedataElement
 
 ; Set an element from gamedata to a different value
-PROC setGamedataElement
-	ARG		@@index:dword, @@newvalue:dword
-	USES	ebx, ecx
+; PROC setGamedataElement
+	; ARG		@@index:dword, @@newvalue:dword
+	; USES	ebx, ecx
 	
-	mov ebx, offset gamelen
-	mov ecx, [@@index]
+	; mov ebx, offset gamelen
+	; mov ecx, [@@index]
 	
-	@@getToIndex:
-		add ebx, 4	; go to next element
-		loop @@getToIndex ; loop until the correct index is reached
+	; @@getToIndex:
+		; add ebx, 4	; go to next element
+		; loop @@getToIndex ; loop until the correct index is reached
 	
-	xchg ecx, [@@newvalue]
-	mov [ebx], ecx
-	ret
-ENDP setGamedataElement
+	; xchg ecx, [@@newvalue]
+	; mov [ebx], ecx
+	; ret
+; ENDP setGamedataElement
 
 ; Decrease character's health by 1
 PROC decreaseHealth
 	USES edx
 	
-	call getGamedataElement, CHARLIVES
+	call getPlayerData, CHARLIVES
 	dec edx
-	call setGamedataElement, CHARLIVES, edx
+	call setPlayerData, CHARLIVES, edx
 	;call fillBackground, 0
 	ret
 ENDP decreaseHealth
@@ -554,49 +554,49 @@ ENDP terminateProcess
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-PROC followChar
-	ARG @@xpos: dword, @@ypos: dword
-	USES edx
+; PROC followChar
+	; ARG @@xpos: dword, @@ypos: dword
+	; USES edx
 	
-	call getGamedataElement, ENEMY1XPOS
+	; call getGamedataElement, ENEMY1XPOS
 	
-	cmp edx, [@@xpos]
-	jl @@increasexpos ; Increase it's position if it's lesser 
-	jg @@decreasexpos ; Decrease it's position if it's greater
+	; cmp edx, [@@xpos]
+	; jl @@increasexpos ; Increase it's position if it's lesser 
+	; jg @@decreasexpos ; Decrease it's position if it's greater
 	
-	jmp @@ypostest
+	; jmp @@ypostest
 	
-	@@increasexpos:
-		inc edx
-		call setGamedataElement, ENEMY1XPOS, edx
-		jmp @@ypostest
+	; @@increasexpos:
+		; inc edx
+		; call setGamedataElement, ENEMY1XPOS, edx
+		; jmp @@ypostest
 	
-	@@decreasexpos:
-		dec edx
-		call setGamedataElement, ENEMY1XPOS, edx
-		jmp @@ypostest
+	; @@decreasexpos:
+		; dec edx
+		; call setGamedataElement, ENEMY1XPOS, edx
+		; jmp @@ypostest
 	
-	@@ypostest:
-		call getGamedataElement, ENEMY1YPOS
-		cmp edx, [@@ypos]
-		jl @@increaseypos
-		jg @@decreaseypos
+	; @@ypostest:
+		; call getGamedataElement, ENEMY1YPOS
+		; cmp edx, [@@ypos]
+		; jl @@increaseypos
+		; jg @@decreaseypos
 	
-		jmp @@return
+		; jmp @@return
 	
-	@@increaseypos:
-		inc edx
-		call setGamedataElement, ENEMY1YPOS, edx
-		jmp @@return
+	; @@increaseypos:
+		; inc edx
+		; call setGamedataElement, ENEMY1YPOS, edx
+		; jmp @@return
 	
-	@@decreaseypos:
-		dec edx
-		call setGamedataElement, ENEMY1YPOS, edx
-		jmp @@return
+	; @@decreaseypos:
+		; dec edx
+		; call setGamedataElement, ENEMY1YPOS, edx
+		; jmp @@return
 	
-	@@return:
-		ret		
-ENDP followChar
+	; @@return:
+		; ret		
+; ENDP followChar
 
 PROC drawBackground
 	USES 	eax, ebx, ecx, edx, edi
@@ -798,12 +798,12 @@ PROC main
 		call	fillBackground, 0
 	
 		; Draw Enemy
-		call	getGamedataElement, ENEMY1XPOS
-		mov eax, edx
-		call	getGamedataElement, ENEMY1YPOS
+		; call	getGamedataElement, ENEMY1XPOS
+		; mov eax, edx
+		; call	getGamedataElement, ENEMY1YPOS
 		
 		; Check lives left
-		call 	getGamedataElement, CHARLIVES
+		call 	getPlayerData, CHARLIVES
 		cmp edx, 0
 		je @@returntomenu ; if lives = 0 return back to the menu
 		
@@ -839,7 +839,7 @@ PROC main
 	@@returntomenu:
 		call drawSprite, 0, 0, offset menu, offset screenBuffer
 		call updateVideoBuffer, offset screenBuffer
-		call setGamedataElement, CHARLIVES, 3 ; set lives to 3 again for the next game
+		call setPlayerData, CHARLIVES, 3 ; set lives to 3 again for the next game
 		call selectOption, offset gamestarted, 0 ; set boolean equal to 0 again
 		jmp @@menuloop	; jump back to the menu loop
 	
