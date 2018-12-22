@@ -454,7 +454,7 @@ PROC drawNSprites
 	ret
 ENDP drawNSprites
 
-PROC drawSprites
+PROC handleSprites
 	ARG		@@data:dword, @@sprite:dword
 	USES	eax, ebx, ecx, edx, edi
 	
@@ -474,11 +474,15 @@ PROC drawSprites
 			je @@aliveBreak
 			
 			inc edi
-			mov eax, [edi]	; the x position in eax
+			mov al, [edi]	; the x position in eax
 			inc edi
-			mov ebx, [edi]	; the y position in ebx
+			mov bl, [edi]	; the y position in ebx
+			
 			; draw the sprite
 			call	drawSprite, eax, ebx, [@@sprite], offset screenBuffer
+			
+			;inc edi
+			;jmp @@endTests
 			
 			inc edi
 			mov al, [edi]	; the direction in eax
@@ -494,22 +498,22 @@ PROC drawSprites
 			@@continue:
 			pop ecx
 			loop @@foreach
-			jmp @@return
+	jmp @@return
 			
 	@@tests:
-		cmp eax, 0
+		cmp al, 0		; if it doesn't need to move
 		je @@endTests
 	
-		cmp eax, 1	; test if it needs to go left
+		cmp al, 1		; test if it needs to go left
 		je @@moveLeft
 			
-		cmp eax, 2	; test if it needs to go right
+		cmp al, 2		; test if it needs to go right
 		je @@moveRight
 			
-		cmp eax, 3		; test if it needs to go up
+		cmp al, 3		; test if it needs to go up
 		je @@moveUp
 			
-		cmp eax, 4	; test if it needs to go down
+		cmp al, 4		; test if it needs to go down
 		je @@moveDown
 		
 		jmp @@endTests
@@ -544,8 +548,7 @@ PROC drawSprites
 	
 	@@return:
 	ret
-ENDP drawSprites
-
+ENDP handleSprites
 
 
 PROC moveObject
@@ -555,25 +558,27 @@ PROC moveObject
 	xor eax,eax
 	xor ecx,ecx
 	mov ebx, [@@data]		
-	mov eax, [ebx]			; eax is the position that needs to be changed
-	movzx ecx, [@@increase]	; ecx is the increasing boolean
+	mov al, [ebx]			; eax is the position that needs to be changed
+	mov cl, [@@increase]	; ecx is the increasing boolean
 	
-	cmp ecx, 1
+	cmp cl, 1
 	je @@increaseValue
 	
-	cmp ecx, 0
+	cmp cl, 0
 	je @@decreaseValue
 	
 	jmp @@return
 	
 	@@increaseValue:
 		add eax, 4
-		mov [ebx], eax 		; replace the position with the new value
+		xchg ecx, eax
+		mov [ebx], ecx 	; replace the position with the new value
 		jmp @@return
 		
 	@@decreaseValue:
 		sub eax, 4
-		mov [ebx], eax		; replace the position with the new value
+		xchg ecx, eax
+		mov [ebx], ecx		; replace the position with the new value
 		jmp @@return
 		
 	@@return:
@@ -611,7 +616,7 @@ PROC main
 	
 	;call	drawSprite, 50, 100, offset stone, offset screenBuffer
 	
-	call	drawSprites, offset projectiles, offset stone
+	call	handleSprites, offset projectiles, offset stone
 	
 	; Draw character
 	call testBoarders, offset character
@@ -660,10 +665,10 @@ DATASEG
 					; alive,xpos,ypos,direction
 					DB 0   ,0   ,0   ,0
 					DB 0   ,0   ,0   ,0
-					DB 0   ,0   ,0   ,0
-					DB 0   ,0   ,0   ,0	
-					DB 0   ,0   ,0   ,0
-					DB 0   ,0   ,0   ,0
+					DB 1   ,180 ,100 ,0
+					DB 1   ,180 ,90  ,0	
+					DB 0   ,180 ,91  ,0
+					DB 0   ,180 ,92  ,0
 					DB 0   ,0   ,0   ,0
 					DB 0   ,0   ,0   ,0
 					DB 0   ,0   ,0   ,0
