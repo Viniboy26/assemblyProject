@@ -111,6 +111,73 @@ ENDP drawRectangle
 
 ;;;;---------------------------------------------------------------------------------------------------
 
+;; Player management
+
+PROC handlePlayer
+	USES eax, ebx, ecx, edx
+	
+	; Test if character remains in screen boundary
+	call testBoarders, offset character
+	
+	; Set eax, ecx and edx equal to 0
+	xor eax, eax
+	xor ecx, ecx
+	xor edx, edx
+	
+	mov ebx, offset playerdata	; pointer to player data
+	mov ax, [ebx]				; assign x-position to ax
+	
+	add ebx, 2					; go to next element
+	mov dx, [ebx]				; assign y-position to dx
+	
+	; Draw the character
+	call	drawSprite, eax, edx, offset character, offset screenBuffer
+	
+	add ebx, 2					; go to next element
+	mov cx, [ebx]				; assign lives to cx
+	cmp cx, 0
+	jg @@return									; if lives > 0, return
+	call selectOption, offset gamestarted, 0	; if lives = 0, set gamestarted to 0 which will return us to the menu
+	
+	@@return:
+		ret
+ENDP handlePlayer
+
+PROC getPlayerData
+	ARG		@@index:dword	RETURNS	edx
+	USES	ebx, ecx
+	
+	mov ebx, offset playerlen
+	mov ecx, [@@index]
+	
+	@@getToIndex:
+		add ebx, 2			; go to next element
+		loop @@getToIndex	; loop until the correct index is reached
+	
+	xor edx, edx
+	mov dx, [ebx]
+	ret
+ENDP getPlayerData
+
+PROC setPlayerData
+	ARG		@@index:dword, @@newvalue:word
+	USES	ebx, ecx
+	
+	mov ebx, offset playerlen
+	mov ecx, [@@index]
+	
+	@@getToIndex:
+		add ebx, 2			; go to next element
+		loop @@getToIndex	; loop until the correct index is reached
+	
+	xor ecx, ecx
+	xchg cx, [@@newvalue]
+	mov [ebx], cx
+	ret
+ENDP setPlayerData
+
+;;;;---------------------------------------------------------------------------------------------------
+
 ;; Game data management
 
 ; Get the element on the specified index from the gamedata array
@@ -163,23 +230,31 @@ ENDP decreaseHealth
 
 ; Move the character's x- or y-position left/right or up/down
 PROC moveCharacter
-	ARG		@@POS:dword, @@direction:byte ; direction determines if we increase or decrease edx
-	USES	edx
+	ARG		@@POS:dword, @@direction:byte
+	USES	eax, ebx, ecx
 	
-	call getGamedataElement, [@@POS]
+	mov ebx, offset playerlen
+	mov ecx, [@@POS]
+	
+	@@getToPos:
+		add ebx, 2		; go to next element
+		loop @@getToPos	; loop until wanted element is reached
+		
+	xor ecx, ecx
+	mov cx, [ebx]	; store element in cx
 	cmp [@@direction], 0
-	jg @@increase
-	jmp @@decrease
+	jg @@increase	; if direction = 1 > 0, increase [ebx]
+	
+	sub cx, 5		; otherwise decrease [ebx]
+	jmp @@return
 	
 	@@increase:
-		add edx, 5
-		jmp @@return
-	
-	@@decrease:
-		sub edx, 5
+		add cx, 5
 	
 	@@return:
-		call setGamedataElement, [@@POS], edx
+		xor eax, eax
+		xchg ax, cx
+		mov [ebx], ax
 		ret
 ENDP moveCharacter
 
@@ -209,52 +284,55 @@ ENDP moveDown
 
 PROC testBoarders
 	ARG @@sprite:dword
-	USES edx, eax, ebx, ecx, edi
+	USES eax, ebx, ecx, edx, edi
 	
+	xor eax, eax
 	xor ecx, ecx
+	xor edx, edx
 	xor edi, edi
+	
 	mov edi, [@@sprite]	; character
 	mov cl, [edi]		; character-width  (stored in ecx)
 	mov al, [edi + 2]	; character-height (stored in edx)
 	
-	call getGamedataElement, CHARXPOS
-	cmp	edx, 0
+	call getPlayerData, CHARXPOS
+	cmp	dx, 0
 	jle	@@setToLeftScreen
-	add edx, ecx
-	cmp edx, GAMEWIDTH
+	add dx, cx
+	cmp dx, GAMEWIDTH
 	jge @@setToRightScreen
 	
 	jmp @@testYPOS
 	
 	@@setToLeftScreen:
-		call setGamedataElement, CHARXPOS, 0
+		call setPlayerData, CHARXPOS, 0
 		jmp @@testYPOS
 	
 	@@setToRightScreen:
 		mov ebx, GAMEWIDTH
 		sub ebx, ecx
-		call setGamedataElement, CHARXPOS, ebx
+		call setPlayerData, CHARXPOS, ebx
 		jmp @@testYPOS
 	
 	@@testYPOS:
-		call getGamedataElement, CHARYPOS
+		call getPlayerData, CHARYPOS
 		cmp edx, INVHEIGHT
 		jle @@setToTopScreen
 		add edx, eax
-		;add edx, INVHEIGHT
+		; add edx, INVHEIGHT
 		cmp edx, SCRHEIGHT
 		jge @@setToBottomScreen
 	
 		jmp @@return
 	
 	@@setToTopScreen:
-		call setGamedataElement, CHARYPOS, INVHEIGHT
+		call setPlayerData, CHARYPOS, INVHEIGHT
 		jmp @@return
 	
 	@@setToBottomScreen:
 		mov ebx, SCRHEIGHT
 		sub ebx, eax
-		call setGamedataElement, CHARYPOS, ebx
+		call setPlayerData, CHARYPOS, ebx
 		jmp @@return
 	
 	@@return:
@@ -744,14 +822,19 @@ PROC main
 		call	drawSprites, offset projectiles, offset stone
 	
 		; Draw character
-		call testBoarders, offset character
-		call	getGamedataElement, CHARXPOS
-		mov eax, edx
-		call	getGamedataElement, CHARYPOS
-		call	drawSprite, eax, edx, offset character, offset screenBuffer
-		;call	followChar, eax, edx
+		call handlePlayer
+		; call testBoarders, offset character
+		; call	getGamedataElement, CHARXPOS
+		; mov eax, edx
+		; call	getGamedataElement, CHARYPOS
+		; call	drawSprite, eax, edx, offset character, offset screenBuffer
+		; call	followChar, eax, edx
 	
 		call updateVideoBuffer, offset screenBuffer
+		
+		mov al, [gamestarted]
+		cmp al, 0
+		je @@returntomenu
 	
 		call 	wait_VBLANK, 1
 	
@@ -785,6 +868,10 @@ DATASEG
 					db 2Ah, 00H, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
 					db 1Dh, 0h, 38h,  				39h,  				0h, 0h, 0h, 1Dh,  		4Bh, 50h, 4Dh,  52h, 53h
 					
+	playerlen		dw	3
+					;	x-pos, y-pos, lives
+	playerdata		dw	 150, 	170, 	3
+	
 	gamelen			dd	6	; length of gamedata array
 	gamedata		dd	150 ; character x-position
 					dd	170 ; character y-position
@@ -795,16 +882,16 @@ DATASEG
 					
 	projectiles		dw 10, 4
 					; alive,xpos,ypos,direction
-					db 0   ,0   ,0   ,0
-					db 0   ,0   ,0   ,0
-					db 0   ,0   ,0   ,0
-					db 0   ,0   ,0   ,0	
-					db 0   ,0   ,0   ,0
-					db 0   ,0   ,0   ,0
-					db 0   ,0   ,0   ,0
-					db 0   ,0   ,0   ,0
-					db 0   ,0   ,0   ,0
-					db 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0	
+					dw 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0
+					dw 0   ,0   ,0   ,0
 					
 	menu		dw 32, 25
 				db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
