@@ -231,30 +231,21 @@ ENDP decreaseHealth
 ; Move the character's x- or y-position left/right or up/down
 PROC moveCharacter
 	ARG		@@POS:dword, @@direction:byte
-	USES	eax, ebx, ecx
+	USES edx
 	
-	mov ebx, offset playerlen
-	mov ecx, [@@POS]
-	
-	@@getToPos:
-		add ebx, 2		; go to next element
-		loop @@getToPos	; loop until wanted element is reached
-		
-	xor ecx, ecx
-	mov cx, [ebx]	; store element in cx
+	xor edx, edx
+	call getPlayerData, [@@POS]
 	cmp [@@direction], 0
 	jg @@increase	; if direction = 1 > 0, increase [ebx]
 	
-	sub cx, 5		; otherwise decrease [ebx]
+	sub dx, 5		; otherwise decrease [ebx]
 	jmp @@return
 	
 	@@increase:
-		add cx, 5
+		add dx, 5
 	
 	@@return:
-		xor eax, eax
-		xchg ax, cx
-		mov [ebx], ax
+		call setPlayerData, [@@POS], edx
 		ret
 ENDP moveCharacter
 
