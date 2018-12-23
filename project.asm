@@ -26,6 +26,7 @@ DOWN		EQU 4
 CHARXPOS	EQU 1	; character begin x-position
 CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
+CHARDIR		EQU 4	; the direction of the character
 ENEMY1XPOS	EQU	4
 ENEMY1YPOS	EQU 5
 CHARWIDTH	EQU 25	; character width
@@ -35,6 +36,10 @@ GRIDWIDTH	EQU 32	; width of the grid
 GRIDHEIGHT	EQU 25	; height of the grid
 
 KEYCNT EQU 89		; number of keys to track
+
+; Menu options
+START	EQU 1
+EXIT	EQU 2
 
 ; -------------------------------------------------------------------
 CODESEG
@@ -107,77 +112,143 @@ ENDP drawRectangle
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-;; Game data management
+;; Player management
 
-; Get the element on the specified index from the gamedata array
-PROC getGamedataElement
+PROC handlePlayer
+	USES eax, ebx, ecx, edx
+	
+	; Test if character remains in screen boundary
+	call testBoarders, offset character
+	
+	; Set eax, ecx and edx equal to 0
+	xor eax, eax
+	xor ecx, ecx
+	xor edx, edx
+	
+	mov ebx, offset playerdata	; pointer to player data
+	mov ax, [ebx]				; assign x-position to ax
+	
+	add ebx, 2					; go to next element
+	mov dx, [ebx]				; assign y-position to dx
+	
+	; Draw the character
+	call	drawSprite, eax, edx, offset character, offset screenBuffer
+	
+	add ebx, 2					; go to next element
+	mov cx, [ebx]				; assign lives to cx
+	cmp cx, 0
+	jg @@return									; if lives > 0, return
+	call selectOption, offset gamestarted, 0	; if lives = 0, set gamestarted to 0 which will return us to the menu
+	
+	@@return:
+		ret
+ENDP handlePlayer
+
+PROC getPlayerData
 	ARG		@@index:dword	RETURNS	edx
 	USES	ebx, ecx
 	
-	mov ebx, offset gamelen
+	mov ebx, offset playerlen
 	mov ecx, [@@index]
 	
-@@getToIndex:
-	add ebx, 4 	; go to next element
-	loop @@getToIndex ; loop until the correct index is reached
+	@@getToIndex:
+		add ebx, 2			; go to next element
+		loop @@getToIndex	; loop until the correct index is reached
 	
-	mov edx, [ebx]
-	ret	
-ENDP getGamedataElement
+	xor edx, edx
+	mov dx, [ebx]
+	ret
+ENDP getPlayerData
 
-; Set an element from gamedata to a different value
-PROC setGamedataElement
-	ARG		@@index:dword, @@newvalue:dword
+PROC setPlayerData
+	ARG		@@index:dword, @@newvalue:word
 	USES	ebx, ecx
 	
-	mov ebx, offset gamelen
+	mov ebx, offset playerlen
 	mov ecx, [@@index]
 	
-@@getToIndex:
-	add ebx, 4	; go to next element
-	loop @@getToIndex ; loop until the correct index is reached
+	@@getToIndex:
+		add ebx, 2			; go to next element
+		loop @@getToIndex	; loop until the correct index is reached
 	
-	xchg ecx, [@@newvalue]
-	mov [ebx], ecx
+	xor ecx, ecx
+	xchg cx, [@@newvalue]
+	mov [ebx], cx
 	ret
-ENDP setGamedataElement
+ENDP setPlayerData
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Game data management
+
+; Get the element on the specified index from the gamedata array
+;PROC getGamedataElement
+;	ARG		@@index:dword	RETURNS	edx
+;	USES	ebx, ecx
+	
+;	mov ebx, offset gamelen
+;	mov ecx, [@@index]
+	
+;@@getToIndex:
+;	add ebx, 4 	; go to next element
+;	loop @@getToIndex ; loop until the correct index is reached
+	
+;	mov edx, [ebx]
+;	ret	
+;ENDP getGamedataElement
+
+; Set an element from gamedata to a different value
+;PROC setGamedataElement
+;	ARG		@@index:dword, @@newvalue:dword
+;	USES	ebx, ecx
+	
+;	mov ebx, offset gamelen
+;	mov ecx, [@@index]
+	
+;@@getToIndex:
+;	add ebx, 4	; go to next element
+;	loop @@getToIndex ; loop until the correct index is reached
+	
+;	xchg ecx, [@@newvalue]
+;	mov [ebx], ecx
+;	ret
+;ENDP setGamedataElement
 
 ; Decrease character's health by 1
 PROC decreaseHealth
 	USES edx
 	
-	call getGamedataElement, CHARLIVES
+	call getPlayerData, CHARLIVES
 	dec edx
-	call setGamedataElement, CHARLIVES, edx
+	call setPlayerData, CHARLIVES, edx
 	;call fillBackground, 0
 	ret
 ENDP decreaseHealth
-
 ;;;;---------------------------------------------------------------------------------------------------
 
 ;; Movement methods
 
 ; Move the character's x- or y-position left/right or up/down
 PROC moveCharacter
-	ARG		@@POS:dword, @@direction:byte ; direction determines if we increase or decrease edx
-	USES	edx
+	ARG		@@POS:dword, @@direction:byte
+	USES 	edx
 	
-	call getGamedataElement, [@@POS]
+	xor edx, edx
+	call getPlayerData, [@@POS]
 	cmp [@@direction], 0
-	jg @@increase
-	jmp @@decrease
+	jg @@increase	; if direction = 1 > 0, increase edx
 	
-@@increase:
-	add edx, 5
+	sub dx, 5		; otherwise decrease edx
 	jmp @@return
 	
-@@decrease:
-	sub edx, 5
+	@@increase:
+		add dx, 5
 	
-@@return:
-	call setGamedataElement, [@@POS], edx
-	ret
+	@@return:
+		call setPlayerData, [@@POS], edx
+		ret
 ENDP moveCharacter
+
 
 ; Move to the right
 PROC moveRight
@@ -205,61 +276,202 @@ ENDP moveDown
 
 PROC testBoarders
 	ARG @@sprite:dword
-	USES edx, eax, ebx, ecx, edi
+	USES eax, ebx, ecx, edx, edi
 	
+	xor eax, eax
 	xor ecx, ecx
+	xor edx, edx
 	xor edi, edi
+	
 	mov edi, [@@sprite]	; character
 	mov cl, [edi]		; character-width  (stored in ecx)
 	mov al, [edi + 2]	; character-height (stored in edx)
 	
-	call getGamedataElement, CHARXPOS
-	cmp	edx, 0
-	jle	@@setToLeftScreen
-	add edx, ecx
-	cmp edx, GAMEWIDTH
-	jge @@setToRightScreen
+	call getPlayerData, CHARXPOS
+	cmp	dx, 0
+	jl	@@setToLeftScreen
+	add dx, cx
+	cmp dx, GAMEWIDTH
+	jg @@setToRightScreen
 	
 	jmp @@testYPOS
 	
-@@setToLeftScreen:
-	call setGamedataElement, CHARXPOS, 0
-	jmp @@testYPOS
+	@@setToLeftScreen:
+		mov edi, offset currentRoom
+		push ecx
+		xor ecx,ecx
+		mov cl, 3
+		xchg al, cl
+		mov [edi], al
+		pop ecx
+		mov ebx, GAMEWIDTH
+		sub ebx, ecx
+		call setPlayerData, CHARXPOS, ebx
+		jmp @@testYPOS
 	
-@@setToRightScreen:
-	mov ebx, GAMEWIDTH
-	sub ebx, ecx
-	call setGamedataElement, CHARXPOS, ebx
-	jmp @@testYPOS
+	@@setToRightScreen:
+		mov ebx, GAMEWIDTH
+		sub ebx, ecx
+		mov edi, offset currentRoom
+		xor ecx,ecx
+		mov cl, 1
+		xchg al,cl
+		mov [edi], al
+		call setPlayerData, CHARXPOS, 0
+		jmp @@testYPOS
 	
-@@testYPOS:
-	call getGamedataElement, CHARYPOS
-	cmp edx, INVHEIGHT
-	jle @@setToTopScreen
-	add edx, eax
-	;add edx, INVHEIGHT
-	cmp edx, SCRHEIGHT
-	jge @@setToBottomScreen
+	@@testYPOS:
+		call getPlayerData, CHARYPOS
+		cmp edx, INVHEIGHT
+		jl @@setToTopScreen
+		add edx, eax
+		; add edx, INVHEIGHT
+		cmp edx, SCRHEIGHT
+		jg @@setToBottomScreen
 	
-	jmp @@return
+		jmp @@return
 	
-@@setToTopScreen:
-	call setGamedataElement, CHARYPOS, INVHEIGHT
-	jmp @@return
+	@@setToTopScreen:
+		mov ebx, SCRHEIGHT
+		sub ebx, eax
+		mov edi, offset currentRoom
+		xor ecx,ecx
+		mov cl, 2
+		xchg al, cl
+		mov [edi], al
+		call setPlayerData, CHARYPOS, ebx
+		jmp @@return
 	
-@@setToBottomScreen:
-	mov ebx, SCRHEIGHT
-	sub ebx, eax
-	call setGamedataElement, CHARYPOS, ebx
-	jmp @@return
+	@@setToBottomScreen:
+		mov ebx, SCRHEIGHT
+		sub ebx, eax
+		mov edi, offset currentRoom
+		xor ecx,ecx
+		mov cl , 1
+		xchg al, cl
+		mov [edi], al
+		call setPlayerData, CHARYPOS, INVHEIGHT
+		jmp @@return
 	
-@@return:
-	ret
+	@@return:
+		ret
 ENDP testBoarders
 
 ;;;;---------------------------------------------------------------------------------------------------
 
+;; Menu management
+
+PROC selectOption
+	ARG	@@darray:dword, @@option:byte ;  option = 0 or 1, according to if we want to de- or increase the value in darray
+	USES eax, ebx, ecx
+	
+	xor ecx, ecx
+	
+	mov ebx, [@@darray]	; pointer to option
+	mov cl, [ebx]		; option
+	
+	cmp [@@option], 0
+	jg @@nextOption
+	jmp @@priorOption
+	
+	@@nextOption:
+		inc cl
+		jmp @@setOption
+	
+	@@priorOption:
+		dec cl
+	
+	@@setOption:
+		xor eax, eax
+		xchg al, cl
+		mov [ebx], al
+	
+	ret
+ENDP selectOption
+
+PROC startGame
+	call selectOption, offset gamestarted, 1
+	ret
+ENDP startGame
+
+
+;;;;---------------------------------------------------------------------------------------------------
+
 ;; Keyboard management
+
+; Determines what to do when a certain key is pressed while in the menu
+PROC keyboardDuringMenu
+	USES ebx, ecx
+	
+	mov ecx, KEYCNT	; amount of keys to process
+	movzx ebx, [byte ptr offset keybscancodes + ecx - 1] ; get scancode
+	
+	; Test to see which key has been pressed
+	
+	; enter (select option)
+	mov bl, [offset __keyb_keyboardState + 1Ch]	; obtain corresponding key state
+	cmp bl, 1
+	je @@selectOption
+	
+	; up arrow
+	mov bl, [offset __keyb_keyboardState + 48h]	; obtain corresponding key state
+	cmp bl, 1
+	je @@priorOption
+	
+	; down arrow
+	mov bl, [offset __keyb_keyboardState + 50h]	; obtain corresponding key state
+	cmp bl, 1
+	je @@nextOption
+	
+	; If no key has been pressed, return without doing anything
+	jmp @@return
+	
+	; Consequences according to pressed key
+	
+	;;-----------------------------------------------
+	
+	; When enter is pressed
+	
+	@@selectOption:
+		mov bl, [offset menuoption]	; get the current menu option, then proceed to test which one it is
+	
+		cmp bl, START
+		je @@startGame
+	
+		cmp bl, EXIT
+		je @@exit
+	
+		jmp @@return
+	
+	@@startGame:
+		call startGame
+		jmp @@return
+	
+	@@exit:
+		call __keyb_uninstallKeyboardHandler
+		call terminateProcess
+	
+	;;-----------------------------------------------
+	
+	; Other keys
+	
+	@@priorOption:
+		mov bl, [offset menuoption]
+		cmp bl, START	; test to see if we remain in amount of options boundary
+		je @@return		; if our current option is the first one we can't go to the prior option
+		call selectOption, offset menuoption, 0
+		jmp @@return
+	
+	@@nextOption:
+		mov bl, [offset menuoption]
+		cmp bl, EXIT	; test to see if we remain in amount of options boundary
+		je @@return		; if our current option is the last one we can't go to the next option
+		call selectOption, offset menuoption, 1
+		jmp @@return
+	
+	@@return:
+		ret
+ENDP keyboardDuringMenu
 
 ; Determines what to do when a certain key is pressed
 PROC keyboardFunction
@@ -370,68 +582,130 @@ ENDP terminateProcess
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-PROC followChar
-	ARG @@xpos: dword, @@ypos: dword
-	USES edx
+; PROC followChar
+	; ARG @@xpos: dword, @@ypos: dword
+	; USES edx
 	
-	call getGamedataElement, ENEMY1XPOS
+	; call getGamedataElement, ENEMY1XPOS
 	
-	cmp edx, [@@xpos]
-	jl @@increasexpos ; Increase it's position if it's lesser 
-	jg @@decreasexpos ; Decrease it's position if it's greater
+	; cmp edx, [@@xpos]
+	; jl @@increasexpos ; Increase it's position if it's lesser 
+	; jg @@decreasexpos ; Decrease it's position if it's greater
 	
-	jmp @@ypostest
+	; jmp @@ypostest
 	
-@@increasexpos:
-	inc edx
-	call setGamedataElement, ENEMY1XPOS, edx
-	jmp @@ypostest
+	; @@increasexpos:
+		; inc edx
+		; call setGamedataElement, ENEMY1XPOS, edx
+		; jmp @@ypostest
 	
-@@decreasexpos:
-	dec edx
-	call setGamedataElement, ENEMY1XPOS, edx
-	jmp @@ypostest
+	; @@decreasexpos:
+		; dec edx
+		; call setGamedataElement, ENEMY1XPOS, edx
+		; jmp @@ypostest
 	
-@@ypostest:
-	call getGamedataElement, ENEMY1YPOS
-	cmp edx, [@@ypos]
-	jl @@increaseypos
-	jg @@decreaseypos
+	; @@ypostest:
+		; call getGamedataElement, ENEMY1YPOS
+		; cmp edx, [@@ypos]
+		; jl @@increaseypos
+		; jg @@decreaseypos
 	
-	jmp @@return
+		; jmp @@return
 	
-@@increaseypos:
-	inc edx
-	call setGamedataElement, ENEMY1YPOS, edx
-	jmp @@return
+	; @@increaseypos:
+		; inc edx
+		; call setGamedataElement, ENEMY1YPOS, edx
+		; jmp @@return
 	
-@@decreaseypos:
-	dec edx
-	call setGamedataElement, ENEMY1YPOS, edx
-	jmp @@return
+	; @@decreaseypos:
+		; dec edx
+		; call setGamedataElement, ENEMY1YPOS, edx
+		; jmp @@return
 	
-@@return:
-	ret		
-ENDP followChar
+	; @@return:
+		; ret		
+; ENDP followChar
 
-PROC drawBackground
-	USES eax, ebx, ecx, edx, edi
+PROC drawRoom
+	ARG 	@@roomData:dword
+	USES 	eax, ebx, ecx, edx, edi, esi
 	
 	xor ecx,ecx
 	xor ebx,ebx
 	xor eax,eax
 	xor edi,edi
+	xor esi,esi
 	
-	mov ebx, 50
+	mov cl, [offset currentRoom]
+	dec ecx					; store the id of the room you want to draw
+	mov ebx,[@@roomData]
+	
+	cmp ecx, 0 
+	je @@index0
+	
+	@@goToRoomIndex:
+		add ebx, 66
+		loop @@goToRoomIndex
+		
+	@@index0:
+	
+	mov edi, 50		; the y begin position of every room
 	mov ecx, 6		; store the number of rows in ecx
+	mov esi, 10		; store the number of cols in esi
+	
+	add ebx, 6		; move to the first room's sprite
 	
 	@@rowLoop:
-		call drawNSprites, 0, ebx, 10, 0, offset background
-		add ebx, 25
+		push esi	; save the cols
+		xor eax,eax
+		@@colLoop:
+			push eax
+			mov al, [ebx]	; The sprite that has to be drawn
+			
+			cmp al, 0
+			je @@endcolLoop	; draw no sprite if 0
+			
+			cmp al, 1
+			je @@drawHorWall	; draw horizontallWall if 1
+			
+			cmp al, 2
+			je @@drawHorWall2
+			
+			cmp al, 3
+			je @@drawFloor
+			
+			jmp @@endcolLoop
+			
+			@@drawHorWall:
+				pop eax
+				call drawSprite, eax, edi, offset horizontalWall, offset screenBuffer
+				jmp @@endcolLoopIfDrawn
+				
+			@@drawHorWall2:
+				pop eax
+				call drawSprite, eax, edi, offset horizontalWall2, offset screenBuffer
+				jmp @@endcolLoopIfDrawn
+				
+			@@drawFloor:
+				pop eax
+				call drawSprite, eax, edi, offset floor, offset screenBuffer
+				jmp @@endcolLoopIfDrawn
+			
+			@@endcolLoop:
+			pop eax
+			@@endcolLoopIfDrawn:
+			dec esi
+			inc ebx
+			add eax, 32		; get eax to the next sprite x position
+			cmp esi, 0
+			jg @@colLoop
+		@@break:
+		pop esi
+		add edi, 25
 		loop @@rowLoop
 		
 	ret
-ENDP drawBackground
+ENDP drawRoom
 
 PROC drawNSprites
 	ARG		@@xpos:word, @@ypos:word, @@nSprites:word, @@gap:word, @@sprite:dword
@@ -570,12 +844,14 @@ PROC moveObject
 	jmp @@return
 	
 	@@increaseValue:
+		xor ecx,ecx
 		add eax, 4
 		xchg ecx, eax
 		mov [ebx], ecx 	; replace the position with the new value
 		jmp @@return
 		
 	@@decreaseValue:
+		xor ecx,ecx
 		sub eax, 4
 		xchg ecx, eax
 		mov [ebx], ecx		; replace the position with the new value
@@ -598,60 +874,96 @@ PROC main
 	call	fillBackground, 0
 	call __keyb_installKeyboardHandler
 	
-@@gameloop:
-	call 	keyboardFunction
-	call	fillBackground, 0
+	@@menuloop:
+		; Draw the menu
+		call drawSprite, 0, 0, offset menu, offset screenBuffer
+		call updateVideoBuffer, offset screenBuffer
+		; Call the keyboard
+		call	keyboardDuringMenu
+		; Test to see if the game has started
+		mov al, [offset gamestarted]
+		cmp al, START
+		je @@leavemenu ; if the game started, leave the menu
 	
-	; Draw Enemy
-	call	getGamedataElement, ENEMY1XPOS
-	mov eax, edx
-	call	getGamedataElement, ENEMY1YPOS
+		jmp @@menuloop
 	
-	call 	getGamedataElement, CHARLIVES
-	cmp edx, 0
-	je @@gameover
-	call 	drawNSprites, 2, 2, edx, 2, offset heart
+		@@leavemenu:
+			jmp @@gameloop ; jump to the game
 	
-	call	drawBackground
+	@@gameloop:
+		call 	keyboardFunction
+		call	fillBackground, 0
 	
-	;call	drawSprite, 50, 100, offset stone, offset screenBuffer
+		; Draw Enemy
+		; call	getGamedataElement, ENEMY1XPOS
+		; mov eax, edx
+		; call	getGamedataElement, ENEMY1YPOS
+		
+		; Check lives left
+		call 	getPlayerData, CHARLIVES
+		cmp edx, 0
+		je @@returntomenu ; if lives = 0 return back to the menu
+		
+		call 	drawNSprites, 2, 2, edx, 2, offset heart
 	
-	call	handleSprites, offset projectiles, offset stone
+		call	drawRoom, offset rooms
 	
-	; Draw character
-	call testBoarders, offset character
-	call	getGamedataElement, CHARXPOS
-	mov eax, edx
-	call	getGamedataElement, CHARYPOS
-	call	drawSprite, eax, edx, offset character, offset screenBuffer
-	;call	followChar, eax, edx
+		;call	drawSprite, 50, 100, offset stone, offset screenBuffer
 	
-	call updateVideoBuffer, offset screenBuffer
+		call	handleSprites, offset projectiles, offset stone
 	
-	; Test if character is alive
-	call getGamedataElement, CHARLIVES ; store the number of lives in edx
-	cmp edx, 0 ; compare the number of lives to 0
-	je @@gameover
+		; Draw character
+		call handlePlayer
+		; call testBoarders, offset character
+		; call	getGamedataElement, CHARXPOS
+		; mov eax, edx
+		; call	getGamedataElement, CHARYPOS
+		; call	drawSprite, eax, edx, offset character, offset screenBuffer
+		; call	followChar, eax, edx
 	
-	call 	wait_VBLANK, 1
+		call updateVideoBuffer, offset screenBuffer
+		
+		mov al, [gamestarted]
+		cmp al, 0
+		je @@returntomenu
 	
-	;; Jump back to the gameloop
-	jmp @@gameloop
+		call 	wait_VBLANK, 1
+	
+		;; Jump back to the gameloop
+		jmp @@gameloop
+		
+		
+	@@returntomenu:
+		call drawSprite, 0, 0, offset menu, offset screenBuffer
+		call updateVideoBuffer, offset screenBuffer
+		call setPlayerData, CHARLIVES, 3 ; set lives to 3 again for the next game
+		call selectOption, offset gamestarted, 0 ; set boolean equal to 0 again
+		jmp @@menuloop	; jump back to the menu loop
 	
 
-@@gameover:
-	call __keyb_uninstallKeyboardHandler
-	call terminateProcess
+	@@gameover:
+		call __keyb_uninstallKeyboardHandler
+		call terminateProcess
 	
 ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
+	currentRoom		dw 1
+
+	gamestarted		db 0
+	
+	menuoption		db 1
+
 	keybscancodes 	db 29h, 02h, 03h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 	52h, 47h, 49h, 	45h, 35h, 2FH, 4Ah
 					db 0Fh, 10h, 11h, 12h, 13h, 14h, 15h, 16h, 17h, 18h, 19h, 1Ah, 1Bh, 		53h, 4Fh, 51h, 	47h, 48h, 49h, 		1Ch, 4Eh
 					db 3Ah, 1Eh, 1Fh, 20h, 21h, 22h, 23h, 24h, 25h, 26h, 27h, 28h, 2Bh,    						4Bh, 4Ch, 4Dh
 					db 2Ah, 00H, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
 					db 1Dh, 0h, 38h,  				39h,  				0h, 0h, 0h, 1Dh,  		4Bh, 50h, 4Dh,  52h, 53h
+					
+	playerlen		dw	3
+	
+	playerdata		dw	150, 170, 3, 1
 					
 	gamelen			dd	6	; length of gamedata array
 	gamedata		dd	150 ; character x-position
@@ -665,8 +977,8 @@ DATASEG
 					; alive,xpos,ypos,direction
 					DB 0   ,0   ,0   ,0
 					DB 0   ,0   ,0   ,0
-					DB 1   ,180 ,100 ,0
-					DB 1   ,180 ,90  ,0	
+					DB 0   ,180 ,100 ,0
+					DB 0   ,180 ,90  ,0	
 					DB 0   ,180 ,91  ,0
 					DB 0   ,180 ,92  ,0
 					DB 0   ,0   ,0   ,0
@@ -767,6 +1079,113 @@ DATASEG
 				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
 				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH,2FH
 				
+	horizontalWall	DW 32,25
+					DB 08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+					DB 08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+					
+	horizontalWall2	DW 32,25
+					DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+					DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+					
+	topLeft		DW 32,25
+				DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+				DB 16H,16H,16H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H
+				DB 16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,16H,16H,16H
+				DB 16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,16H,16H,16H,16H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,16H,16H,16H,16H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,16H,16H,16H,16H,07H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,16H,16H,16H,16H,07H,07H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,16H,16H,16H,16H,07H,07H,07H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,16H,16H,07H,07H,07H,07H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,16H,16H,07H,07H,07H,07H,07H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,16H,08H,08H,08H,08H,08H,08H,08H,08H
+				DB 08H,08H,08H,08H,08H,08H,08H,08H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+				DB 08H,08H,08H,08H,08H,08H,16H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+				DB 07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+				DB 07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+				DB 16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H
+				DB 07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H
+				DB 07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+				DB 07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+				DB 07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+				DB 08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+				DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+				
+	floor	DW 32,25
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+					
 	stone		DW 6,5
 				DB 2FH,00H,00H,00H,00H,2FH
 				DB 00H,18H,18H,18H,18H,00H
@@ -774,6 +1193,56 @@ DATASEG
 				DB 00H,18H,18H,18H,18H,00H
 				DB 2FH,00H,00H,00H,00H,2FH
 				
+	rooms	DB 1, 0, 0, 2, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+			
+			DB 2, 1, 0, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+			
+			DB 3, 0, 0, 0, 2, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,1,2,1,1
+				
+	menu	dw 32, 25
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
+			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
 ; -------------------------------------------------------------------
 
 ; -------------------------------------------------------------------
