@@ -22,7 +22,7 @@ UP			EQU 3
 DOWN		EQU 4
 
 
-; Indexes of character information in "gamedata" array
+; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
 CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
@@ -33,6 +33,15 @@ CHARHEIGHT	EQU 25	; character height
 CHARCOLOR	EQU 40 	; character color
 GRIdwIDTH	EQU 32	; width of the grid
 GRIDHEIGHT	EQU 25	; height of the grid
+
+; Indexes of projectile information in "projectiles" array
+P1	EQU	1
+P1	EQU	1
+P1	EQU	1
+P1	EQU	1
+P1	EQU	1
+P1	EQU	1
+P1	EQU	1
 
 KEYCNT EQU 89		; number of keys to track
 
@@ -136,11 +145,15 @@ PROC handlePlayer
 	add ebx, 2					; go to next element
 	mov cx, [ebx]				; assign lives to cx
 	cmp cx, 0
-	jg @@return									; if lives > 0, return
+	jg @@stillAlive								; if lives > 0, the player is still alive, gamestarted does not need to be set to 0
 	call selectOption, offset gamestarted, 0	; if lives = 0, set gamestarted to 0 which will return us to the menu
+	jmp @@return								; after setting gamestarted to 0 return out of the function
+	
+	@@stillAlive:
+	call 	drawNSprites, 2, 2, ecx, 2, offset heart ; draw remaining lives	
 	
 	@@return:
-		ret
+		ret	
 ENDP handlePlayer
 
 PROC getPlayerData
@@ -176,53 +189,87 @@ PROC setPlayerData
 	ret
 ENDP setPlayerData
 
-;;;;---------------------------------------------------------------------------------------------------
-
-;; Game data management
-
-; Get the element on the specified index from the gamedata array
-; PROC getGamedataElement
-	; ARG		@@index:dword	RETURNS	edx
-	; USES	ebx, ecx
-	
-	; mov ebx, offset gamelen
-	; mov ecx, [@@index]
-	
-; @@getToIndex:
-	; add ebx, 4 	; go to next element
-	; loop @@getToIndex ; loop until the correct index is reached
-	
-	; mov edx, [ebx]
-	; ret	
-; ENDP getGamedataElement
-
-; Set an element from gamedata to a different value
-; PROC setGamedataElement
-	; ARG		@@index:dword, @@newvalue:dword
-	; USES	ebx, ecx
-	
-	; mov ebx, offset gamelen
-	; mov ecx, [@@index]
-	
-	; @@getToIndex:
-		; add ebx, 4	; go to next element
-		; loop @@getToIndex ; loop until the correct index is reached
-	
-	; xchg ecx, [@@newvalue]
-	; mov [ebx], ecx
-	; ret
-; ENDP setGamedataElement
-
-; Decrease character's health by 1
+; Decrease player's health by 1
 PROC decreaseHealth
 	USES edx
 	
 	call getPlayerData, CHARLIVES
 	dec edx
 	call setPlayerData, CHARLIVES, edx
-	;call fillBackground, 0
 	ret
 ENDP decreaseHealth
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Game data management
+
+; Get the information from an element from an array containing game data
+PROC vectorref
+	ARG		@@array:dword, @@element, dword, @@information:dword	RETURNS	edx
+	USES	ebx, ecx
+	
+	mov ebx, [@@array]
+	add ebx, 2	; skip amount of elements
+	mov ecx, [@@element]
+	dec ecx
+	cmp ecx, 0
+	je @@elementzero
+	
+	@@getToElement:
+		add ebx, 10 			; go to next element
+		loop @@getToElement 	; loop until the correct element is reached
+		
+	@@elementzero:
+	
+	mov ecx, [@@information]
+	
+	@@getToInformation:
+		add ebx, 2				; get to next piece of information
+		loop @@getToInformation	; loop until the correct information is reached
+	
+	mov edx, [ebx]
+	ret	
+ENDP vectorref
+
+; Set a piece of information from an element from an array to a different value
+PROC vectorset
+	ARG		@@array:dword, @@element:dword, @@information:dword, @@newvalue:word
+	USES	ebx, ecx
+	
+	mov ebx, [@@array]
+	add ebx, 2	; skip amount of elements
+	mov ecx, [@@element]
+	dec ecx
+	cmp ecx, 0
+	je @@elementzero
+	
+	@@getToElement:
+		add ebx, 10 			; go to next element
+		loop @@getToElement 	; loop until the correct element is reached
+		
+	@@elementzero:
+	
+	mov ecx, [@@information]
+	
+	@@getToInformation:
+		add ebx, 2				; get to next piece of information
+		loop @@getToInformation	; loop until the correct information is reached
+	
+	xor ecx, ecx
+	xchg cx, [@@newvalue]
+	mov [ebx], cx
+	ret
+ENDP vectorset
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Projectile management
+
+; Returns the first available element in projectiles array (i.e. alive = 0)
+; PROC getAvailableProjectile
+	
+	; mov ebx, offset projectiles
+; ENDP getAvailableProjectile
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -447,8 +494,8 @@ ENDP keyboardDuringMenu
 
 ; Determines what to do when a certain key is pressed during the game
 PROC keyboardFunction
-	USES	ebx, ecx
 	
+	USES	ebx, ecx
 	mov ecx, KEYCNT	; amount of keys to process
 	movzx ebx, [byte ptr offset keybscancodes + ecx - 1] ; get scancode
 
@@ -638,7 +685,7 @@ PROC drawNSprites
 	ret
 ENDP drawNSprites
 
-PROC drawSprites
+PROC handleSprites
 	ARG		@@data:dword, @@sprite:dword
 	USES	eax, ebx, ecx, edx, edi
 	
@@ -728,7 +775,7 @@ PROC drawSprites
 	
 	@@return:
 	ret
-ENDP drawSprites
+ENDP handleSprites
 
 
 
@@ -764,6 +811,8 @@ PROC moveObject
 	ret
 ENDP moveObject
 
+;;;;---------------------------------------------------------------------------------------------------
+
 ;; MAIN method
 
 PROC main
@@ -796,37 +845,26 @@ PROC main
 	@@gameloop:
 		call 	keyboardFunction
 		call	fillBackground, 0
+		call	drawBackground
 	
 		; Draw Enemy
 		; call	getGamedataElement, ENEMY1XPOS
 		; mov eax, edx
 		; call	getGamedataElement, ENEMY1YPOS
-		
-		; Check lives left
-		call 	getPlayerData, CHARLIVES
-		cmp edx, 0
-		je @@returntomenu ; if lives = 0 return back to the menu
-		
-		call 	drawNSprites, 2, 2, edx, 2, offset heart
 	
-		call	drawBackground
 	
 		;call	drawSprite, 50, 100, offset stone, offset screenBuffer
 	
-		call	drawSprites, offset projectiles, offset stone
+		; call	handleSprites, offset projectiles, offset stone
 	
-		; Draw character
+		; Handle everything concerning the player
 		call handlePlayer
-		; call testBoarders, offset character
-		; call	getGamedataElement, CHARXPOS
-		; mov eax, edx
-		; call	getGamedataElement, CHARYPOS
-		; call	drawSprite, eax, edx, offset character, offset screenBuffer
+		
 		; call	followChar, eax, edx
 	
 		call updateVideoBuffer, offset screenBuffer
 		
-		mov al, [gamestarted]
+		mov al, [offset gamestarted]
 		cmp al, 0
 		je @@returntomenu
 	
@@ -837,8 +875,9 @@ PROC main
 		
 		
 	@@returntomenu:
+		call fillBackground, 0	; delete everything
 		call drawSprite, 0, 0, offset menu, offset screenBuffer
-		call updateVideoBuffer, offset screenBuffer
+		call updateVideoBuffer, offset screenBuffer	; draw menu
 		call setPlayerData, CHARLIVES, 3 ; set lives to 3 again for the next game
 		call selectOption, offset gamestarted, 0 ; set boolean equal to 0 again
 		jmp @@menuloop	; jump back to the menu loop
@@ -874,18 +913,20 @@ DATASEG
 					dd	80
 					dd  0   ; number of projectiles alive
 					
-	projectiles		dw 10, 4
-					; alive,xpos,ypos,direction
-					dw 0   ,0   ,0   ,0
-					dw 0   ,0   ,0   ,0
-					dw 0   ,0   ,0   ,0
-					dw 0   ,0   ,0   ,0	
-					dw 0   ,0   ,0   ,0
-					dw 0   ,0   ,0   ,0
-					dw 0   ,0   ,0   ,0
-					dw 0   ,0   ,0   ,0
-					dw 0   ,0   ,0   ,0
-					dw 0   ,0   ,0   ,0
+	projectiles		dw 	10, 5	; amount of projectiles, information per projectile
+							
+							; alive, x-pos, y-pos,	direction,	collision?
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					
 					
 	menu		dw 32, 25
 				db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
