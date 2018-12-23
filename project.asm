@@ -19,14 +19,18 @@ INVHEIGHT	EQU 50
 TRUE		EQU	1
 FALSE		EQU 0
 
+; Directions
 STILL		EQU	0
 LEFT		EQU 1
 RIGHT		EQU 2
 UP			EQU 3
 DOWN		EQU 4
 
-; character speed
+; character constants
 CHARSPEED	EQU 6
+CHARWIDTH	EQU 25	; character width
+CHARHEIGHT	EQU 25	; character height
+CHARCOLOR	EQU 40 	; character color
 
 ; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
@@ -34,15 +38,13 @@ CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
 CHARDIR		EQU 4	; character's direction
 CHARSHOOT	EQU	5	; boolean, test if charater is shooting
+
 ENEMY1XPOS	EQU	4
 ENEMY1YPOS	EQU 5
-CHARWIDTH	EQU 25	; character width
-CHARHEIGHT	EQU 25	; character height
-CHARCOLOR	EQU 40 	; character color
 GRIdwIDTH	EQU 32	; width of the grid
 GRIDHEIGHT	EQU 25	; height of the grid
 
-; projectile speed
+; projectile constants
 PROJSPEED 		EQU	7
 
 ; Indexes of projectile information in "projectiles" array
@@ -52,12 +54,16 @@ PROJYPOS		EQU 3
 PROJDIRECTION	EQU	4
 PROJCOLLISION	EQU	5
 
-
-KEYCNT EQU 89		; number of keys to track
+; number of keys to track
+KEYCNT EQU 89
 
 ; Menu options
 START	EQU 1
 EXIT	EQU 2
+
+; Pause options
+RESUME 	EQU	1
+; EXIT EQU 2 is already defined
 
 ; -------------------------------------------------------------------
 CODESEG
@@ -155,9 +161,9 @@ PROC handlePlayer
 	add ebx, 2					; go to next element
 	mov cx, [ebx]				; assign lives to cx
 	cmp cx, 0
-	jg @@stillAlive								; if lives > 0, the player is still alive, gamestarted does not need to be set to 0
-	call selectOption, offset gamestarted, 0	; if lives = 0, set gamestarted to 0 which will return us to the menu
-	jmp @@return								; after setting gamestarted to 0 return out of the function
+	jg @@stillAlive									; if lives > 0, the player is still alive, gamestarted does not need to be set to 0
+	call selectOption, offset gamestarted, FALSE	; if lives = 0, set gamestarted to 0 which will return us to the menu
+	jmp @@return									; after setting gamestarted to 0 return out of the function
 	
 	@@stillAlive:
 	call 	drawNSprites, 2, 2, ecx, 2, offset heart ; draw remaining lives	
@@ -289,24 +295,24 @@ PROC shootProjectile
 	xor ecx, ecx
 	mov cx, [ebx]	; amount of projectiles
 	
-	; find the first available projectile in projectiles array (i.e. alive = 0)
+	; find the first available projectile in projectiles array (i.e. alive = false)
 	@@findProjectile:
 		call vectorref, offset projectiles, ecx, PROJALIVE
 		cmp edx, FALSE
 		je @@projectileFound	; if the projectile is dead it means it is available
-		loop @@findProjectile	; if not available, search for the next one
+		loop @@findProjectile	; if not available, continue search
 		
 	jmp @@return	; if we didn't find any available projectile, return without doing anything
 		
 	@@projectileFound:
 	; get current player's position and direction to give it to the projectile
 	xor eax, eax
-	call getPlayerData, CHARXPOS ; stores the player's x-position in edx
+	call getPlayerData, CHARXPOS ; stores the player's x-position in dx
 	mov ax, dx
 	xor ebx, ebx
-	call getPlayerData, CHARYPOS ; stores the player's y-position in edx
+	call getPlayerData, CHARYPOS ; stores the player's y-position in dx
 	mov bx, dx
-	call getPlayerData, CHARDIR	; stores the player's direction in edx
+	call getPlayerData, CHARDIR	; stores the player's direction in dx
 	; change the values of the projectile
 	call vectorset, offset projectiles, ecx, PROJALIVE, 1
 	call vectorset, offset projectiles, ecx, PROJXPOS, eax
@@ -316,6 +322,13 @@ PROC shootProjectile
 	@@return:
 		ret
 ENDP shootProjectile
+
+; Deletes a projectile
+PROC deleteProjectile
+	ARG		@@projectile:dword
+	call vectorset, offset projectiles, [@@projectile], PROJALIVE, FALSE
+	ret
+ENDP deleteProjectile
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -514,44 +527,95 @@ ENDP drawRoom
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-;; Menu management
+;; Pause management
 
-PROC selectOption
-	ARG	@@darray:dword, @@option:byte ;  option = 0 or 1, according to if we want to de- or increase the value in darray
-	USES eax, ebx, ecx
+; Determines what to do when a certain key is pressed while the game is paused
+PROC keyboardDuringPause
+	USES ebx, ecx
 	
-	xor ecx, ecx
+	mov ecx, KEYCNT	; amount of keys to process
+	movzx ebx, [byte ptr offset keybscancodes + ecx - 1] ; get scancode
 	
-	mov ebx, [@@darray]	; pointer to option
-	mov cl, [ebx]		; option
+	; Test to see which key has been pressed
 	
-	cmp [@@option], 0
-	jg @@nextOption
-	jmp @@priorOption
+	; enter (select option)
+	mov bl, [offset __keyb_keyboardState + 1Ch]	; obtain corresponding key state
+	cmp bl, 1
+	je @@selectOption
 	
-	@@nextOption:
-		inc cl
-		jmp @@setOption
+	; up arrow
+	mov bl, [offset __keyb_keyboardState + 48h]	; obtain corresponding key state
+	cmp bl, 1
+	je @@priorOption
+	
+	; down arrow
+	mov bl, [offset __keyb_keyboardState + 50h]	; obtain corresponding key state
+	cmp bl, 1
+	je @@nextOption
+	
+	; If no key has been pressed, return without doing anything
+	jmp @@return
+	
+	; Consequences according to pressed key
+	
+	;;-----------------------------------------------
+	
+	; When enter is pressed
+	
+	@@selectOption:
+		mov bl, [offset pauseoption]	; get the current pause option, then proceed to test which one it is
+	
+		cmp bl, RESUME
+		je @@resumeGame
+	
+		cmp bl, EXIT
+		je @@exit
+	
+		jmp @@return
+	
+	@@resumeGame:
+		call resumeGame
+		jmp @@return
+	
+	@@exit:
+		call __keyb_uninstallKeyboardHandler
+		call terminateProcess
+	
+	;;-----------------------------------------------
+	
+	; Other keys
 	
 	@@priorOption:
-		dec cl
+		mov bl, [offset pauseoption]
+		cmp bl, RESUME	; test to see if we remain in amount of options boundary
+		je @@return		; if our current option is the first one we can't go to the prior option
+		call selectOption, offset pauseoption, 0
+		jmp @@return
 	
-	@@setOption:
-		xor eax, eax
-		xchg al, cl
-		mov [ebx], al
+	@@nextOption:
+		mov bl, [offset pauseoption]
+		cmp bl, EXIT	; test to see if we remain in amount of options boundary
+		je @@return		; if our current option is the last one we can't go to the next option
+		call selectOption, offset pauseoption, 1
+		jmp @@return
 	
-	ret
-ENDP selectOption
+	@@return:
+		ret
+ENDP keyboardDuringPause
 
-PROC startGame
-	call selectOption, offset gamestarted, 1
+PROC resumeGame
+	call selectOption, offset gamepaused, FALSE
 	ret
-ENDP startGame
+ENDP resumeGame
+
+PROC pauseGame
+	call selectOption, offset gamepaused, TRUE
+	ret
+ENDP pauseGame
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-;; Keyboard management
+;; Menu management
 
 ; Determines what to do when a certain key is pressed while in the menu
 PROC keyboardDuringMenu
@@ -627,6 +691,44 @@ PROC keyboardDuringMenu
 		ret
 ENDP keyboardDuringMenu
 
+PROC selectOption
+	ARG	@@darray:dword, @@option:byte ;  option = 0 or 1, according to if we want to de- or increase the value in darray
+	USES eax, ebx, ecx
+	
+	xor ecx, ecx
+	
+	mov ebx, [@@darray]	; pointer to option
+	mov cl, [ebx]		; option
+	
+	cmp [@@option], 0
+	jg @@nextOption
+	jmp @@priorOption
+	
+	@@nextOption:
+		inc cl
+		jmp @@setOption
+	
+	@@priorOption:
+		dec cl
+	
+	@@setOption:
+		xor eax, eax
+		xchg al, cl
+		mov [ebx], al
+	
+	ret
+ENDP selectOption
+
+PROC startGame
+	call selectOption, offset gamestarted, TRUE
+	ret
+ENDP startGame
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Keyboard management
+
+
 ; Determines what to do when a certain key is pressed during the game
 PROC keyboardFunction
 	
@@ -636,10 +738,10 @@ PROC keyboardFunction
 
 	; Test to see which key has been pressed
 	
-	; button underneath escape
-	mov bl, [offset __keyb_keyboardState + 29h]	; obtain corresponding key state
+	; p button
+	mov bl, [offset __keyb_keyboardState + 19h]	; obtain corresponding key state
 	cmp bl, 1
-	je @@escapeKey
+	je @@pauseGame
 	
 	; right arrow
 	mov bl, [offset __keyb_keyboardState + 4Dh]	; obtain corresponding key state
@@ -675,9 +777,9 @@ PROC keyboardFunction
 	
 	; Consequences according to pressed key
 	
-	@@escapeKey: 
-		call __keyb_uninstallKeyboardHandler
-		call terminateProcess
+	@@pauseGame: 
+		call pauseGame
+		jmp @@return
 	
 	@@moveRight:
 		call moveRight
@@ -973,17 +1075,6 @@ PROC main
 		call	drawRoom, offset rooms
 	
 		call	handleSprites, offset projectiles, offset stone
-		
-		; vectorref & vectorset test
-		; call vectorref, offset projectiles, 10, PROJXPOS
-		; mov ecx, edx
-		; call vectorref, offset projectiles, 10, PROJYPOS
-		; call vectorset, offset projectiles, 10, PROJXPOS, 50
-		; call vectorset, offset projectiles, 10, PROJYPOS, 100
-		; call vectorref, offset projectiles, 10, PROJXPOS
-		; mov ecx, edx
-		; call vectorref, offset projectiles, 10, PROJYPOS
-		; call drawSprite, ecx, edx, offset stone, offset screenBuffer
 	
 		; Handle everything concerning the player
 		call handlePlayer
@@ -992,9 +1083,15 @@ PROC main
 	
 		call updateVideoBuffer, offset screenBuffer
 		
+		; test if we died and have to return to the menu
 		mov al, [offset gamestarted]
-		cmp al, 0
+		cmp al, FALSE
 		je @@returntomenu
+		
+		; test if we paused the game
+		mov al, [offset gamepaused]
+		cmp al, TRUE
+		je @@pausegame
 	
 		call 	wait_VBLANK, 1
 	
@@ -1009,6 +1106,17 @@ PROC main
 		call setPlayerData, CHARLIVES, 6 ; set lives to 6 again for the next game
 		call selectOption, offset gamestarted, 0 ; set boolean equal to 0 again
 		jmp @@menuloop	; jump back to the menu loop
+		
+	
+	@@pausegame:
+		call fillBackground, 0	; delete everything
+		call drawSprite, 0, 0, offset menu, offset screenBuffer
+		call updateVideoBuffer, offset screenBuffer	; draw pause menu
+		call keyboardDuringPause
+		mov al, [offset gamepaused]
+		cmp al, FALSE
+		je @@gameloop	; if game isn't paused anymore, return to the game loop
+		jmp @@pausegame	; jump back to the pause loop
 	
 
 	@@gameover:
@@ -1022,8 +1130,12 @@ DATASEG
 	currentRoom		dw 1	; room the player is in
 	
 	gamestarted		db 0	; boolean to test if game has started
+	
+	gamepaused		db 0	; boolean to test if the game is paused
 
 	menuoption		db 1	; holds the current menu option
+	
+	pauseoption		db 1	; holds the current pause option
 	
 	keybscancodes 	db 29h, 02h, 03h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 	52h, 47h, 49h, 	45h, 35h, 2FH, 4Ah
 					db 0Fh, 10h, 11h, 12h, 13h, 14h, 15h, 16h, 17h, 18h, 19h, 1Ah, 1Bh, 		53h, 4Fh, 51h, 	47h, 48h, 49h, 		1Ch, 4Eh
