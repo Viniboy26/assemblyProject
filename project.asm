@@ -690,26 +690,22 @@ PROC handleSprites
 	USES	eax, ebx, ecx, edx;, edi
 	
 	mov ebx, [@@data]	; pointer to array
-	mov ecx, [ebx]		; amount of elements
+	xor ecx, ecx
+	mov cx, [ebx]		; amount of elements
 	
-	@@findElements:	; find the elements that need to be drawn
+	@@findElements:	; find the elements that need to be drawn and draw them
 		call vectorref, [@@data], ecx, PROJALIVE
-		cmp edx, 1
-		je @@drawProjectile
-		loop @@findElements
-		
-	jmp @@noAvailableElement
-		
-	@@drawProjectile:
+		cmp edx, 0
+		je @@skipDraw
 		xor eax, eax
 		call vectorref, [@@data], ecx, PROJXPOS
 		mov eax, edx
 		call vectorref, [@@data], ecx, PROJYPOS
 		call drawSprite, eax, edx, [@@sprite], offset screenBuffer
-		dec ecx
-		jmp @@findElements
+		@@skipDraw:
+		loop @@findElements
 		
-	@@noAvailableElement:
+	@@return:
 		ret
 		
 	; xor ecx, ecx
@@ -802,31 +798,48 @@ ENDP handleSprites
 
 
 PROC moveObject
-	ARG		@@POS:dword, @@increase:byte
-	USES	eax, ebx, ecx
+	ARG		@@POS:dword, @@direction:byte
+	USES 	edx
 	
-	xor eax,eax
-	xor ecx,ecx
-	mov ebx, [@@POS]		
-	mov eax, [ebx]			; eax is the position that needs to be changed
+	xor edx, edx
+	call getPlayerData, [@@POS]
+	cmp [@@direction], 0
+	jg @@increase	; if direction = 1 > 0, increase edx
 	
-	cmp [@@increase], 1
-	je @@increaseValue
+	sub dx, 5		; otherwise decrease edx
+	jmp @@return
 	
-	cmp ecx, 0
-	je @@decreaseValue
+	@@increase:
+		add dx, 5
 	
-	@@increaseValue:
-		add eax, 4
-		jmp @@return
-		
-	@@decreaseValue:
-		sub eax, 4
-		jmp @@return
-		
 	@@return:
+		call setPlayerData, [@@POS], edx
+		ret
+	; ARG		@@POS:dword, @@increase:byte
+	; USES	eax, ebx, ecx
 	
-	ret
+	; xor eax,eax
+	; xor ecx,ecx
+	; mov ebx, [@@POS]		
+	; mov eax, [ebx]			; eax is the position that needs to be changed
+	
+	; cmp [@@increase], 1
+	; je @@increaseValue
+	
+	; cmp ecx, 0
+	; je @@decreaseValue
+	
+	; @@increaseValue:
+		; add eax, 4
+		; jmp @@return
+		
+	; @@decreaseValue:
+		; sub eax, 4
+		; jmp @@return
+		
+	; @@return:
+	
+	; ret
 ENDP moveObject
 
 ;;;;---------------------------------------------------------------------------------------------------
@@ -873,17 +886,17 @@ PROC main
 	
 		;call	drawSprite, 50, 100, offset stone, offset screenBuffer
 	
-		; call	handleSprites, offset projectiles, offset stone
+		call	handleSprites, offset projectiles, offset stone
 		
 		; vectorref & vectorset test
-		; call vectorref, offset projectiles, 1, PROJXPOS
+		; call vectorref, offset projectiles, 10, PROJXPOS
 		; mov ecx, edx
-		; call vectorref, offset projectiles, 1, PROJYPOS
-		; call vectorset, offset projectiles, 1, PROJXPOS, 50
-		; call vectorset, offset projectiles, 1, PROJYPOS, 100
-		; call vectorref, offset projectiles, 1, PROJXPOS
+		; call vectorref, offset projectiles, 10, PROJYPOS
+		; call vectorset, offset projectiles, 10, PROJXPOS, 50
+		; call vectorset, offset projectiles, 10, PROJYPOS, 100
+		; call vectorref, offset projectiles, 10, PROJXPOS
 		; mov ecx, edx
-		; call vectorref, offset projectiles, 1, PROJYPOS
+		; call vectorref, offset projectiles, 10, PROJYPOS
 		; call drawSprite, ecx, edx, offset stone, offset screenBuffer
 	
 		; Handle everything concerning the player
