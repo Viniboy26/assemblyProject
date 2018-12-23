@@ -21,11 +21,14 @@ RIGHT		EQU 2
 UP			EQU 3
 DOWN		EQU 4
 
+; character speed
+CHARSPEED	EQU 5
 
 ; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
 CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
+CHARDIR		EQU 4	; character's direction
 ENEMY1XPOS	EQU	4
 ENEMY1YPOS	EQU 5
 CHARWIDTH	EQU 25	; character width
@@ -33,6 +36,9 @@ CHARHEIGHT	EQU 25	; character height
 CHARCOLOR	EQU 40 	; character color
 GRIdwIDTH	EQU 32	; width of the grid
 GRIDHEIGHT	EQU 25	; height of the grid
+
+; projectile speed
+PROJSPEED 		EQU	7
 
 ; Indexes of projectile information in "projectiles" array
 PROJALIVE		EQU	1
@@ -285,11 +291,11 @@ PROC moveCharacter
 	cmp [@@direction], 0
 	jg @@increase	; if direction = 1 > 0, increase edx
 	
-	sub dx, 5		; otherwise decrease edx
+	sub dx, CHARSPEED	; otherwise decrease edx
 	jmp @@return
 	
 	@@increase:
-		add dx, 5
+		add dx, CHARSPEED
 	
 	@@return:
 		call setPlayerData, [@@POS], edx
@@ -299,24 +305,28 @@ ENDP moveCharacter
 ; Move to the right
 PROC moveRight
 	call moveCharacter, CHARXPOS, 1
+	call setPlayerData, CHARDIR, RIGHT
 	ret
 ENDP moveRight
 
 ; Move to the left
 PROC moveLeft
 	call moveCharacter, CHARXPOS, 0
+	call setPlayerData, CHARDIR, LEFT
 	ret
 ENDP moveLeft
 
 ; Move up
 PROC moveUp
 	call moveCharacter, CHARYPOS, 0
+	call setPlayerData, CHARDIR, UP
 	ret
 ENDP moveUp
 
 ; Move down
 PROC moveDown
 	call moveCharacter, CHARYPOS, 1
+	call setPlayerData, CHARDIR, DOWN
 	ret
 ENDP moveDown
 
@@ -695,151 +705,96 @@ PROC handleSprites
 	
 	@@findElements:	; find the elements that need to be drawn and draw them
 		call vectorref, [@@data], ecx, PROJALIVE
-		cmp edx, 0
-		je @@skipDraw
+		cmp edx, 0	; if the element isn't alive, don't do anything and skip to next element
+		je @@nextElement
 		xor eax, eax
+		
+		; get x- and y-position and draw the sprite
 		call vectorref, [@@data], ecx, PROJXPOS
 		mov eax, edx
 		call vectorref, [@@data], ecx, PROJYPOS
 		call drawSprite, eax, edx, [@@sprite], offset screenBuffer
-		@@skipDraw:
+		; after drawing the sprite, check direction and change x- and y-position accordingly for the next iteration
+		call vectorref, [@@data], ecx, PROJDIRECTION
+		cmp edx, LEFT
+		je @@moveLeft
+		cmp edx, RIGHT
+		je @@moveRight
+		cmp edx, UP
+		je @@moveUp
+		cmp edx, DOWN
+		je @@moveDown
+		
+		@@nextElement:
 		loop @@findElements
+		
+		jmp @@return
+		
+		@@moveLeft:
+			call moveObject, [@@data], ecx, LEFT
+			jmp @@nextElement
+			
+		@@moveRight:
+			call moveObject, [@@data], ecx, RIGHT
+			jmp @@nextElement
+		
+		@@moveUp:
+			call moveObject, [@@data], ecx, UP
+			jmp @@nextElement
+			
+		@@moveDown:
+			call moveObject, [@@data], ecx, DOWN
+			jmp @@nextElement
 		
 	@@return:
 		ret
 		
-	; xor ecx, ecx
-	
-	; mov edi, [@@data]	; store the data array in edi
-	; mov cl, [edi]		; store the number of elements in ecx
-	; add edi, 4
-	
-	; xor eax,eax
-	; xor ebx,ebx
-	; @@foreach:
-			; push ecx
-			; mov cl, [edi]
-			; cmp cl, 0			; test if the element must be drawn
-			; je @@aliveBreak
-			
-			; inc edi
-			; mov eax, [edi]	; the x position in eax
-			; inc edi
-			; mov ebx, [edi]	; the y position in ebx
-			;;draw the sprite
-			; call	drawSprite, eax, ebx, [@@sprite], offset screenBuffer
-			
-			; inc edi
-			; mov al, [edi]	; the direction in eax
-			
-			; jmp @@tests			
-			
-			; @@endTests:
-			; inc edi
-			; jmp @@continue
-			
-			; @@aliveBreak:
-			; add edi,4   	; we still need to add 4 to go to the next element
-			; @@continue:
-			; pop ecx
-			; loop @@foreach
-			; jmp @@return
-			
-	; @@tests:
-		; cmp eax, 0
-		; je @@endTests
-	
-		; cmp eax, 1	; test if it needs to go left
-		; je @@moveLeft
-			
-		; cmp eax, 2	; test if it needs to go right
-		; je @@moveRight
-			
-		; cmp eax, 3		; test if it needs to go up
-		; je @@moveUp
-			
-		; cmp eax, 4	; test if it needs to go down
-		; je @@moveDown
-		
-		; jmp @@endTests
-			
-		; @@moveLeft:
-			; push edi
-			; sub edi, 2				; store the x position of the object in edi
-			; call moveObject, edi, 0	; 0 means decreasing
-			; pop edi
-			; jmp @@endTests
-				
-		; @@moveRight:
-			; push edi
-			; sub edi, 2				; store the x position of the object in edi	
-			; call moveObject, edi, 1	; 1 means increase
-			; pop edi
-			; jmp @@endTests
-				
-		; @@moveUp:
-			; push edi
-			; dec edi					; store the y position of the object in edi
-			; call moveObject, edi, 0	; 0 means decreasing
-			; pop edi
-			; jmp @@endTests
-				
-		; @@moveDown:
-			; push edi
-			; dec edi					; store the y position of the object in edi
-			; call moveObject, edi, 1	; 1 means increasing
-			; pop edi
-			; jmp @@endTests
-	
-	; @@return:
-	; ret
 ENDP handleSprites
 
 
 
 PROC moveObject
-	ARG		@@POS:dword, @@direction:byte
-	USES 	edx
+	ARG		@@array:dword, @@element:dword, @@direction:byte
+	USES 	eax, edx
 	
-	xor edx, edx
-	call getPlayerData, [@@POS]
-	cmp [@@direction], 0
-	jg @@increase	; if direction = 1 > 0, increase edx
+	; store the x-position of the element in eax
+	xor eax, eax
+	call vectorref, [@@array], [@@element], PROJXPOS
+	mov eax, edx
+	; get the y-position which is stored in edx
+	call vectorref, [@@array], [@@element], PROJYPOS
 	
-	sub dx, 5		; otherwise decrease edx
-	jmp @@return
+	cmp [@@direction], LEFT
+	je @@moveLeft
+	cmp [@@direction], RIGHT
+	je @@moveRight
+	cmp [@@direction], UP
+	je @@moveUp
+	cmp [@@direction], DOWN
+	je @@moveDown
 	
-	@@increase:
-		add dx, 5
+	@@moveLeft:
+		sub ax, PROJSPEED
+		call vectorset, [@@array], [@@element], PROJXPOS, ax
+		jmp @@return
+		
+	@@moveRight:
+		add ax, PROJSPEED
+		call vectorset, [@@array], [@@element], PROJXPOS, ax
+		jmp @@return
+		
+	@@moveUp:
+		sub dx, PROJSPEED
+		call vectorset, [@@array], [@@element], PROJYPOS, dx
+		jmp @@return
+		
+	@@moveDown:
+		add dx, PROJSPEED
+		call vectorset, [@@array], [@@element], PROJYPOS, dx
+		jmp @@return
 	
 	@@return:
-		call setPlayerData, [@@POS], edx
 		ret
-	; ARG		@@POS:dword, @@increase:byte
-	; USES	eax, ebx, ecx
-	
-	; xor eax,eax
-	; xor ecx,ecx
-	; mov ebx, [@@POS]		
-	; mov eax, [ebx]			; eax is the position that needs to be changed
-	
-	; cmp [@@increase], 1
-	; je @@increaseValue
-	
-	; cmp ecx, 0
-	; je @@decreaseValue
-	
-	; @@increaseValue:
-		; add eax, 4
-		; jmp @@return
-		
-	; @@decreaseValue:
-		; sub eax, 4
-		; jmp @@return
-		
-	; @@return:
-	
-	; ret
 ENDP moveObject
 
 ;;;;---------------------------------------------------------------------------------------------------
@@ -943,9 +898,9 @@ DATASEG
 					db 2Ah, 00H, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
 					db 1Dh, 0h, 38h,  				39h,  				0h, 0h, 0h, 1Dh,  		4Bh, 50h, 4Dh,  52h, 53h
 					
-	playerlen		dw	3
-					;	x-pos, y-pos, lives
-	playerdata		dw	 150, 	170, 	3
+	playerlen		dw	4
+					;	x-pos, y-pos, lives		direction
+	playerdata		dw	 150, 	170, 	3,		1
 	
 	gamelen			dd	6	; length of gamedata array
 	gamedata		dd	150 ; character x-position
@@ -958,12 +913,12 @@ DATASEG
 	projectiles		dw 	10, 5	; amount of projectiles, information per projectile
 							
 							; alive, x-pos, y-pos,	direction,	collision?
-					dw		0,		150,		180,		0,			0
+					dw		1,		150,		180,		1,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
+					dw		1,		50,		60,		2,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
