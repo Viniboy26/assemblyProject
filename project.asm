@@ -21,19 +21,32 @@ RIGHT		EQU 2
 UP			EQU 3
 DOWN		EQU 4
 
+; character speed
+CHARSPEED	EQU 6
 
-; Indexes of character information in "gamedata" array
+; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
 CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
-CHARDIR		EQU 4	; the direction of the character
+CHARDIR		EQU 4	; character's direction
 ENEMY1XPOS	EQU	4
 ENEMY1YPOS	EQU 5
 CHARWIDTH	EQU 25	; character width
 CHARHEIGHT	EQU 25	; character height
 CHARCOLOR	EQU 40 	; character color
-GRIDWIDTH	EQU 32	; width of the grid
+GRIdwIDTH	EQU 32	; width of the grid
 GRIDHEIGHT	EQU 25	; height of the grid
+
+; projectile speed
+PROJSPEED 		EQU	7
+
+; Indexes of projectile information in "projectiles" array
+PROJALIVE		EQU	1
+PROJXPOS		EQU	2
+PROJYPOS		EQU 3
+PROJDIRECTION	EQU	4
+PROJCOLLISION	EQU	5
+
 
 KEYCNT EQU 89		; number of keys to track
 
@@ -119,6 +132,7 @@ PROC handlePlayer
 	
 	; Test if character remains in screen boundary
 	call testBoarders, offset character
+	;call collisionWithRoom
 	
 	; Set eax, ecx and edx equal to 0
 	xor eax, eax
@@ -131,6 +145,9 @@ PROC handlePlayer
 	add ebx, 2					; go to next element
 	mov dx, [ebx]				; assign y-position to dx
 	
+	call collisionWithRoom
+	;call collisionWithBlock, 64, 100, offset character, offset horizontalWall
+	
 	; Draw the character
 	call	drawSprite, eax, edx, offset character, offset screenBuffer
 	
@@ -139,6 +156,7 @@ PROC handlePlayer
 	cmp cx, 0
 	jg @@return									; if lives > 0, return
 	call selectOption, offset gamestarted, 0	; if lives = 0, set gamestarted to 0 which will return us to the menu
+	
 	
 	@@return:
 		ret
@@ -224,6 +242,70 @@ PROC decreaseHealth
 	;call fillBackground, 0
 	ret
 ENDP decreaseHealth
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Game data management
+
+; Get the information from an element from an array containing game data
+PROC vectorref
+	ARG		@@array:dword, @@element: dword, @@information:dword	RETURNS	edx
+	USES	ebx, ecx
+	
+	mov ebx, [@@array]
+	add ebx, 2	; skip amount of elements
+	mov ecx, [@@element]
+	dec ecx
+	cmp ecx, 0
+	je @@elementzero
+	
+	@@getToElement:
+		add ebx, 10 			; go to next element
+		loop @@getToElement 	; loop until the correct element is reached
+		
+	@@elementzero:
+	
+	mov ecx, [@@information]
+	
+	@@getToInformation:
+		add ebx, 2				; get to next piece of information
+		loop @@getToInformation	; loop until the correct information is reached
+	
+	xor edx, edx
+	mov dx, [ebx]
+	ret	
+ENDP vectorref
+
+; Set a piece of information from an element from an array to a different value
+PROC vectorset
+	ARG		@@array:dword, @@element:dword, @@information:dword, @@newvalue:word
+	USES	ebx, ecx
+	
+	mov ebx, [@@array]
+	add ebx, 2	; skip amount of elements
+	mov ecx, [@@element]
+	dec ecx
+	cmp ecx, 0
+	je @@elementzero
+	
+	@@getToElement:
+		add ebx, 10 			; go to next element
+		loop @@getToElement 	; loop until the correct element is reached
+		
+	@@elementzero:
+	
+	mov ecx, [@@information]
+	
+	@@getToInformation:
+		add ebx, 2				; get to next piece of information
+		loop @@getToInformation	; loop until the correct information is reached
+	
+	xor ecx, ecx
+	xchg cx, [@@newvalue]
+	mov [ebx], cx
+	ret
+ENDP vectorset
+
 ;;;;---------------------------------------------------------------------------------------------------
 
 ;; Movement methods
@@ -238,39 +320,42 @@ PROC moveCharacter
 	cmp [@@direction], 0
 	jg @@increase	; if direction = 1 > 0, increase edx
 	
-	sub dx, 5		; otherwise decrease edx
+	sub dx, CHARSPEED	; otherwise decrease edx
 	jmp @@return
 	
 	@@increase:
-		add dx, 5
+		add dx, CHARSPEED
 	
 	@@return:
 		call setPlayerData, [@@POS], edx
 		ret
 ENDP moveCharacter
 
-
 ; Move to the right
 PROC moveRight
 	call moveCharacter, CHARXPOS, 1
+	call setPlayerData, CHARDIR, RIGHT
 	ret
 ENDP moveRight
 
 ; Move to the left
 PROC moveLeft
 	call moveCharacter, CHARXPOS, 0
+	call setPlayerData, CHARDIR, LEFT
 	ret
 ENDP moveLeft
 
 ; Move up
 PROC moveUp
 	call moveCharacter, CHARYPOS, 0
+	call setPlayerData, CHARDIR, UP
 	ret
 ENDP moveUp
 
 ; Move down
 PROC moveDown
 	call moveCharacter, CHARYPOS, 1
+	call setPlayerData, CHARDIR, DOWN
 	ret
 ENDP moveDown
 
@@ -297,26 +382,28 @@ PROC testBoarders
 	jmp @@testYPOS
 	
 	@@setToLeftScreen:
+		push eax
 		mov edi, offset currentRoom
-		push ecx
-		xor ecx,ecx
-		mov cl, 3
-		xchg al, cl
+		call getRoomDoorID, LEFT
+		xor eax,eax
+		xchg al, dl
 		mov [edi], al
-		pop ecx
+		pop eax
 		mov ebx, GAMEWIDTH
 		sub ebx, ecx
 		call setPlayerData, CHARXPOS, ebx
 		jmp @@testYPOS
 	
 	@@setToRightScreen:
+		push eax
+		mov edi, offset currentRoom
+		call getRoomDoorID, RIGHT
+		xor eax, eax
+		xchg al, dl
+		mov [edi], al
+		pop eax
 		mov ebx, GAMEWIDTH
 		sub ebx, ecx
-		mov edi, offset currentRoom
-		xor ecx,ecx
-		mov cl, 1
-		xchg al,cl
-		mov [edi], al
 		call setPlayerData, CHARXPOS, 0
 		jmp @@testYPOS
 	
@@ -325,30 +412,29 @@ PROC testBoarders
 		cmp edx, INVHEIGHT
 		jl @@setToTopScreen
 		add edx, eax
-		; add edx, INVHEIGHT
 		cmp edx, SCRHEIGHT
 		jg @@setToBottomScreen
 	
 		jmp @@return
 	
 	@@setToTopScreen:
+		push eax
+		mov edi, offset currentRoom
+		call getRoomDoorID, UP
+		xor eax,eax
+		xchg al, dl
+		mov [edi], al
+		pop eax
 		mov ebx, SCRHEIGHT
 		sub ebx, eax
-		mov edi, offset currentRoom
-		xor ecx,ecx
-		mov cl, 2
-		xchg al, cl
-		mov [edi], al
 		call setPlayerData, CHARYPOS, ebx
 		jmp @@return
 	
 	@@setToBottomScreen:
-		mov ebx, SCRHEIGHT
-		sub ebx, eax
 		mov edi, offset currentRoom
-		xor ecx,ecx
-		mov cl , 1
-		xchg al, cl
+		call getRoomDoorID, DOWN
+		xor eax,eax
+		xchg al, dl
 		mov [edi], al
 		call setPlayerData, CHARYPOS, INVHEIGHT
 		jmp @@return
@@ -522,18 +608,22 @@ PROC keyboardFunction
 	call terminateProcess
 	
 @@moveRight:
+	call setPlayerData, CHARDIR, RIGHT
 	call moveRight
 	jmp @@return
 	
 @@moveLeft:
+	call setPlayerData, CHARDIR, LEFT
 	call moveLeft
 	jmp @@return
 	
 @@moveUp:
+	call setPlayerData, CHARDIR, UP
 	call moveUp
 	jmp @@return
 	
 @@moveDown:
+	call setPlayerData, CHARDIR, DOWN
 	call moveDown
 	jmp @@return
 	
@@ -626,6 +716,44 @@ ENDP terminateProcess
 		; ret		
 ; ENDP followChar
 
+;-------------------------------------------------------------------------------------------------
+
+; Room management
+
+; store the the desired door (left, right, up, down) roomID in edx
+PROC getRoomDoorID
+	ARG  @@doorSide:byte RETURNS edx
+	USES ebx, ecx
+	
+	xor ecx,ecx
+	mov cx, [offset currentRoom]
+	dec ecx
+	
+	mov ebx, offset rooms
+	
+	cmp cx, 0
+	je @@room1
+	
+	@@getToRoomIndex:
+		add ebx, 66
+		loop @@getToRoomIndex
+		
+	@@room1:
+	xor ecx,ecx
+	mov cl, [@@doorSide]
+	
+	@@getToDoorSide:
+		inc ebx
+		loop @@getToDoorSide
+		
+	; now set the current room to the room linked with this door (stored in ebx)
+	xor edx, edx
+	mov dl, [ebx]
+
+	ret
+ENDP getRoomDoorID
+
+
 PROC drawRoom
 	ARG 	@@roomData:dword
 	USES 	eax, ebx, ecx, edx, edi, esi
@@ -636,7 +764,7 @@ PROC drawRoom
 	xor edi,edi
 	xor esi,esi
 	
-	mov cl, [offset currentRoom]
+	mov cx, [offset currentRoom]
 	dec ecx					; store the id of the room you want to draw
 	mov ebx,[@@roomData]
 	
@@ -707,6 +835,168 @@ PROC drawRoom
 	ret
 ENDP drawRoom
 
+PROC collisionWithBlock
+	ARG		@@blockXpos:word, @@blockYpos:word, @@sprite:dword, @@blockSprite:dword
+	USES eax, ebx, ecx, edx, edi
+	
+	xor eax, eax
+	xor ecx, ecx
+	xor edx, edx
+	xor edi, edi
+	
+	mov edi, [@@sprite]	; character
+	mov cl, [edi]		; character-width  (stored in ecx)
+	
+	; test if the charxpos + it's width is greater then the block's xpos
+	call getPlayerData, CHARXPOS
+	add dl, cl				; edx is now the charxpos + it's width
+	cmp dx, [@@blockXpos]		; charxpos + charwidth > blockXpos ?
+	jg	@@test2
+	jmp @@return
+	
+	; test if the charxpos is lesser then the block's xpos + the block's width
+	@@test2:
+	xor eax,eax
+	mov ebx, [@@blockSprite]		; the block sprite is stored in ebx
+	mov eax, [ebx]					; eax is now the block's width
+	add ax, [@@blockXpos]			; eax is now the block's xpos + width
+	call getPlayerData, CHARXPOS
+	cmp dx, ax
+	jl @@test3
+	jmp @@return
+	
+	; test if the charypos + it's height is greater then the block's ypos
+	@@test3:
+	xor eax, eax
+	mov al, [edi + 2]				; character-height (stored in eax)
+	call getPlayerData, CHARYPOS
+	add dl, al					; edx is now the charypos + it's height
+	cmp dx, [@@blockYpos]
+	jg @@test4
+	jmp @@return
+	
+	; test if the charypos is lesser then the block's ypos + the block's height
+	@@test4:
+	xor eax,eax
+	mov eax, [ebx + 2]
+	add ax, [@@blockYpos]
+	call getPlayerData, CHARYPOS
+	cmp dx, ax
+	jl @@collides
+	jmp @@return
+	
+	@@collides:
+		call getPlayerData, CHARDIR
+		cmp dx, LEFT
+		je @@setToRightOfBlock
+	
+		cmp dx, RIGHT
+		je @@setToLeftOfBlock
+	
+		cmp dx, UP
+		je @@setToBottomOfBlock
+	
+		cmp dx, DOWN
+		je @@setToTopOfBlock
+	
+	jmp @@return
+	
+	; charxpos = block's xpos + block's width
+	@@setToRightOfBlock:
+		xor eax,eax
+		mov eax, [ebx]					; eax is now the block's width
+		add ax, [@@blockXpos]			; eax is now the blokc's xpos + width
+		call setPlayerData, CHARXPOS, eax
+		jmp @@return
+		
+	; charxpos = block's xpos - char's width
+	@@setToLeftOfBlock:
+		xor eax, eax
+		mov ax, [@@blockXpos]
+		sub ax, [edi]
+		call setPlayerData, CHARXPOS, eax
+		jmp @@return
+		
+	@@setToBottomOfBlock:
+		xor eax, eax
+		mov ax, [@@blockYpos]
+		add ax, [edi + 2]
+		call setPlayerData, CHARYPOS, eax
+		jmp @@return
+		
+	@@setToTopOfBlock:
+		xor eax, eax
+		mov ax, [@@blockYpos]
+		sub ax, [edi + 2]
+		call setPlayerData, CHARYPOS, eax
+		
+	@@return:
+		ret
+ENDP collisionWithBlock
+	
+
+PROC collisionWithRoom
+	USES eax, ebx, ecx, edx, edi, esi
+	
+	xor ecx,ecx
+	xor ebx,ebx
+	xor eax,eax
+	xor edi,edi
+	xor esi,esi
+	
+	mov cx, [offset currentRoom]	; index of the room that needs to be drawn
+	dec ecx
+	
+	mov edi, offset rooms
+	
+	cmp ecx,0
+	je @@index0
+	
+	@@goToRoomIndex:
+		add edi, 66
+		loop @@goToRoomIndex
+		
+	@@index0:
+		
+	mov ebx, 50		; the y begin position of every room
+	mov ecx, 6		; store the number of rows in ecx
+	mov esi, 10		; store the number of cols in esi
+	
+	add edi, 6		; move to the first room's sprite
+	
+	@@rowLoop:
+		push esi	; save the cols
+		xor eax,eax
+		@@colLoop:
+			push eax
+			mov al, [edi]	; The sprite that has to be collided with or not
+			
+			cmp al, 0
+			je @@noCollision	; no collision if there's no sprite
+			
+			cmp al, 3			; no collision if there's a floor
+			je @@noCollision
+			
+			pop eax
+			call collisionWithBlock, eax, ebx, offset character, offset horizontalWall
+			jmp @@endcolLoopIfCollided
+			
+			@@noCollision:
+			pop eax
+			@@endcolLoopIfCollided:
+			dec esi
+			inc edi
+			add eax, 32		; get eax to the next sprite x position
+			cmp esi, 0
+			jg @@colLoop
+		@@break:
+		pop esi
+		add ebx, 25
+		loop @@rowLoop
+		
+	ret
+ENDP collisionWithRoom
+
 PROC drawNSprites
 	ARG		@@xpos:word, @@ypos:word, @@nSprites:word, @@gap:word, @@sprite:dword
 	USES eax, ebx, ecx, edx, edi
@@ -730,136 +1020,105 @@ ENDP drawNSprites
 
 PROC handleSprites
 	ARG		@@data:dword, @@sprite:dword
-	USES	eax, ebx, ecx, edx, edi
+	USES	eax, ebx, ecx, edx;, edi
 	
+	mov ebx, [@@data]	; pointer to array
 	xor ecx, ecx
+	mov cx, [ebx]		; amount of elements
 	
-	
-	mov edi, [@@data]	; store the data array in edi
-	mov cl, [edi]		; store the number of elements in ecx
-	add edi, 4
-	
-	xor eax,eax
-	xor ebx,ebx
-	@@foreach:
-			push ecx
-			mov cl, [edi]
-			cmp cl, 0			; test if the element must be drawn
-			je @@aliveBreak
-			
-			inc edi
-			mov al, [edi]	; the x position in eax
-			inc edi
-			mov bl, [edi]	; the y position in ebx
-			
-			; draw the sprite
-			call	drawSprite, eax, ebx, [@@sprite], offset screenBuffer
-			
-			;inc edi
-			;jmp @@endTests
-			
-			inc edi
-			mov al, [edi]	; the direction in eax
-			
-			jmp @@tests			
-			
-			@@endTests:
-			inc edi
-			jmp @@continue
-			
-			@@aliveBreak:
-			add edi,4   	; we still need to add 4 to go to the next element
-			@@continue:
-			pop ecx
-			loop @@foreach
-	jmp @@return
-			
-	@@tests:
-		cmp al, 0		; if it doesn't need to move
-		je @@endTests
-	
-		cmp al, 1		; test if it needs to go left
+	@@findElements:	; find the elements that need to be drawn and draw them
+		call vectorref, [@@data], ecx, PROJALIVE
+		cmp edx, 0	; if the element isn't alive, don't do anything and skip to next element
+		je @@nextElement
+		xor eax, eax
+		
+		; get x- and y-position and draw the sprite
+		call vectorref, [@@data], ecx, PROJXPOS
+		mov eax, edx
+		call vectorref, [@@data], ecx, PROJYPOS
+		call drawSprite, eax, edx, [@@sprite], offset screenBuffer
+		; after drawing the sprite, check direction and change x- and y-position accordingly for the next iteration
+		call vectorref, [@@data], ecx, PROJDIRECTION
+		cmp edx, LEFT
 		je @@moveLeft
-			
-		cmp al, 2		; test if it needs to go right
+		cmp edx, RIGHT
 		je @@moveRight
-			
-		cmp al, 3		; test if it needs to go up
+		cmp edx, UP
 		je @@moveUp
-			
-		cmp al, 4		; test if it needs to go down
+		cmp edx, DOWN
 		je @@moveDown
 		
-		jmp @@endTests
-			
+		@@nextElement:
+		loop @@findElements
+		
+		jmp @@return
+		
 		@@moveLeft:
-			push edi
-			sub edi, 2				; store the x position of the object in edi
-			call moveObject, edi, 0	; 0 means decreasing
-			pop edi
-			jmp @@endTests
-				
+			call moveObject, [@@data], ecx, LEFT
+			jmp @@nextElement
+			
 		@@moveRight:
-			push edi
-			sub edi, 2				; store the x position of the object in edi	
-			call moveObject, edi, 1	; 1 means increase
-			pop edi
-			jmp @@endTests
-				
+			call moveObject, [@@data], ecx, RIGHT
+			jmp @@nextElement
+		
 		@@moveUp:
-			push edi
-			dec edi					; store the y position of the object in edi
-			call moveObject, edi, 0	; 0 means decreasing
-			pop edi
-			jmp @@endTests
-				
+			call moveObject, [@@data], ecx, UP
+			jmp @@nextElement
+			
 		@@moveDown:
-			push edi
-			dec edi					; store the y position of the object in edi
-			call moveObject, edi, 1	; 1 means increasing
-			pop edi
-			jmp @@endTests
-	
+			call moveObject, [@@data], ecx, DOWN
+			jmp @@nextElement
+		
 	@@return:
-	ret
+		ret
+		
 ENDP handleSprites
 
 
 PROC moveObject
-	ARG		@@data:dword, @@increase:byte
-	USES	eax, ebx, ecx
+	ARG		@@array:dword, @@element:dword, @@direction:byte
+	USES 	eax, edx
 	
-	xor eax,eax
-	xor ecx,ecx
-	mov ebx, [@@data]		
-	mov al, [ebx]			; eax is the position that needs to be changed
-	mov cl, [@@increase]	; ecx is the increasing boolean
+	; store the x-position of the element in eax
+	xor eax, eax
+	call vectorref, [@@array], [@@element], PROJXPOS
+	mov eax, edx
+	; get the y-position which is stored in edx
+	call vectorref, [@@array], [@@element], PROJYPOS
 	
-	cmp cl, 1
-	je @@increaseValue
+	cmp [@@direction], LEFT
+	je @@moveLeft
+	cmp [@@direction], RIGHT
+	je @@moveRight
+	cmp [@@direction], UP
+	je @@moveUp
+	cmp [@@direction], DOWN
+	je @@moveDown
 	
-	cmp cl, 0
-	je @@decreaseValue
-	
-	jmp @@return
-	
-	@@increaseValue:
-		xor ecx,ecx
-		add eax, 4
-		xchg ecx, eax
-		mov [ebx], ecx 	; replace the position with the new value
+	@@moveLeft:
+		sub ax, PROJSPEED
+		call vectorset, [@@array], [@@element], PROJXPOS, ax
 		jmp @@return
 		
-	@@decreaseValue:
-		xor ecx,ecx
-		sub eax, 4
-		xchg ecx, eax
-		mov [ebx], ecx		; replace the position with the new value
+	@@moveRight:
+		add ax, PROJSPEED
+		call vectorset, [@@array], [@@element], PROJXPOS, ax
 		jmp @@return
 		
+	@@moveUp:
+		sub dx, PROJSPEED
+		call vectorset, [@@array], [@@element], PROJYPOS, dx
+		jmp @@return
+		
+	@@moveDown:
+		add dx, PROJSPEED
+		call vectorset, [@@array], [@@element], PROJYPOS, dx
+		jmp @@return
+	
 	@@return:
-	ret
+		ret
 ENDP moveObject
+
 
 ;; MAIN method
 
@@ -914,12 +1173,6 @@ PROC main
 	
 		; Draw character
 		call handlePlayer
-		; call testBoarders, offset character
-		; call	getGamedataElement, CHARXPOS
-		; mov eax, edx
-		; call	getGamedataElement, CHARYPOS
-		; call	drawSprite, eax, edx, offset character, offset screenBuffer
-		; call	followChar, eax, edx
 	
 		call updateVideoBuffer, offset screenBuffer
 		
@@ -936,7 +1189,7 @@ PROC main
 	@@returntomenu:
 		call drawSprite, 0, 0, offset menu, offset screenBuffer
 		call updateVideoBuffer, offset screenBuffer
-		call setPlayerData, CHARLIVES, 3 ; set lives to 3 again for the next game
+		call setPlayerData, CHARLIVES, 6 ; set lives to 3 again for the next game
 		call selectOption, offset gamestarted, 0 ; set boolean equal to 0 again
 		jmp @@menuloop	; jump back to the menu loop
 	
@@ -961,30 +1214,31 @@ DATASEG
 					db 2Ah, 00H, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
 					db 1Dh, 0h, 38h,  				39h,  				0h, 0h, 0h, 1Dh,  		4Bh, 50h, 4Dh,  52h, 53h
 					
-	playerlen		dw	3
-	
-	playerdata		dw	150, 170, 3, 1
+	playerlen		dw	4
+						;xpos	;ypos	;lives	;direction
+	playerdata		dw	150, 	120, 	6, 		1
 					
 	gamelen			dd	6	; length of gamedata array
 	gamedata		dd	150 ; character x-position
 					dd	170 ; character y-position
-					dd 	3	; number of lives
+					dd 	6	; number of lives
 					dd	100
 					dd	80
 					dd  0   ; number of projectiles alive
 					
-	projectiles		DW 10, 4
-					; alive,xpos,ypos,direction
-					DB 0   ,0   ,0   ,0
-					DB 0   ,0   ,0   ,0
-					DB 0   ,180 ,100 ,0
-					DB 0   ,180 ,90  ,0	
-					DB 0   ,180 ,91  ,0
-					DB 0   ,180 ,92  ,0
-					DB 0   ,0   ,0   ,0
-					DB 0   ,0   ,0   ,0
-					DB 0   ,0   ,0   ,0
-					DB 0   ,0   ,0   ,0
+	projectiles		dw 	10, 5	; amount of projectiles, information per projectile
+							
+					; alive, x-pos, y-pos,	direction,	collision?
+					dw		0,	150,	  180,		1,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,	   50,	   60,		2,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
 					
 	background	DW 32, 25
 				DB 06H,06H,06H,06H,06H,06H,06H,06H,70H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
@@ -1039,7 +1293,7 @@ DATASEG
 				DB 02H, 03H, 08H, 07H, 02H, 04H, 04H, 04H, 54H, 04H, 05H, 04H, 64H, 04H, 04H, 04H, 54H, 04H, 45H, 04H, 04H, 04H, 05H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H
 				DB 02H, 03H, 08H, 07H, 02H, 04H, 04H, 04H, 54H, 04H, 05H, 04H, 64H, 04H, 04H, 04H, 54H, 04H, 45H, 04H, 04H, 04H, 05H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H
 				DB 02H, 03H, 08H, 07H, 02H, 04H, 04H, 04H, 54H, 04H, 05H, 04H, 64H, 04H, 04H, 04H, 54H, 04H, 45H, 04H, 04H, 04H, 05H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H, 04H
-				
+	
 	character	DW 23, 25
 				DB 2FH,2FH,2FH,2FH,2FH,2FH,2FH,00H,00H,00H,00H,00H,00H,00H,00H,00H,2FH,2FH,2FH,2FH,2FH,2FH,2FH
 				DB 2FH,2FH,2FH,2FH,2FH,00H,00H,57H,57H,57H,57H,57H,57H,57H,57H,57H,00H,00H,2FH,2FH,2FH,2FH,2FH
@@ -1193,7 +1447,7 @@ DATASEG
 				DB 00H,18H,18H,18H,18H,00H
 				DB 2FH,00H,00H,00H,00H,2FH
 				
-	rooms	DB 1, 0, 0, 2, 0, 0
+	rooms	DB 1, 0, 2, 0, 0, 0
 			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,3
@@ -1201,7 +1455,7 @@ DATASEG
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,2,1,2,1,2,1
 			
-			DB 2, 1, 0, 0, 0, 0
+			DB 2, 1, 0, 0, 5, 0
 			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 3,3,3,3,3,3,3,3,3,2
@@ -1209,13 +1463,62 @@ DATASEG
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,3,3,2,1,2,1
 			
-			DB 3, 0, 0, 0, 2, 0
+			DB 3, 0, 0, 0, 6, 0
 			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,3,3,1,2,1,1
+
+			DB 4, 0, 5, 0, 7, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,1,2,1,1
+
+			DB 5, 4, 6, 2, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 6, 5, 0, 3, 9, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,1,2,1,1
+
+			DB 7, 0, 0, 4, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 8, 0, 9, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 9, 8, 0, 6, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+				
 				
 	menu	dw 32, 25
 			db 06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H,06H
@@ -1250,6 +1553,8 @@ UDATASEG
 	palette		db 768 dup (?)
 	
 	screenBuffer db 64000 dup (?) 
+	
+	currentPlayerSprite db 579 dup(?)
 ; -------------------------------------------------------------------
 ; STACK
 ; -------------------------------------------------------------------
