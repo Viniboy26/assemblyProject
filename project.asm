@@ -27,7 +27,7 @@ UP			EQU 3
 DOWN		EQU 4
 
 ; character constants
-CHARSPEED	EQU 6
+CHARSPEED	EQU 15	; 6	
 CHARWIDTH	EQU 25	; character width
 CHARHEIGHT	EQU 25	; character height
 CHARCOLOR	EQU 40 	; character color
@@ -143,6 +143,7 @@ PROC handlePlayer
 	
 	; Test if character remains in screen boundary
 	call testBoarders, offset character
+	call collisionWithRoom
 	
 	; Set eax, ecx and edx equal to 0
 	xor eax, eax
@@ -314,7 +315,7 @@ PROC shootProjectile
 	mov bx, dx
 	call getPlayerData, CHARDIR	; stores the player's direction in dx
 	; change the values of the projectile
-	call vectorset, offset projectiles, ecx, PROJALIVE, 1
+	call vectorset, offset projectiles, ecx, PROJALIVE, TRUE
 	call vectorset, offset projectiles, ecx, PROJXPOS, eax
 	call vectorset, offset projectiles, ecx, PROJYPOS, ebx
 	call vectorset, offset projectiles, ecx, PROJDIRECTION, edx
@@ -329,6 +330,208 @@ PROC deleteProjectile
 	call vectorset, offset projectiles, [@@projectile], PROJALIVE, FALSE
 	ret
 ENDP deleteProjectile
+
+; Delete all projectiles
+PROC deleteAllProjectiles
+	USES	ebx, ecx, edx
+	
+	mov ebx, offset projectiles
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of projectiles
+	
+	; find every living projectile and delete them
+	@@findProjectile:
+		call vectorref, offset projectiles, ecx, PROJALIVE
+		cmp edx, FALSE
+		je @@next	; projectile is already dead
+		call deleteProjectile, ecx
+		@@next:
+		loop @@findProjectile
+		
+	@@return:
+		ret
+ENDP deleteAllProjectiles
+
+; Test if a projectile collides with a block
+PROC projectileCollisionWithBlock
+	ARG		@@projectile:dword, @@blockXpos:word, @@blockYpos:word, @@sprite:dword, @@blockSprite:dword
+	USES 	eax, ebx, ecx, edx, edi
+	
+	xor eax, eax
+	xor ecx, ecx
+	xor edx, edx
+	xor edi, edi
+	
+	mov edi, [@@sprite]	; projectile
+	mov cl, [edi]		; projectile width  (stored in ecx)
+	
+	; test if the charxpos + it's width is greater then the block's xpos
+	call vectorref, offset projectiles, [@@projectile], PROJXPOS
+	add dl, cl				; edx is now the projxpos + it's width
+	cmp dx, [@@blockXpos]		; projxpos + projwidth > blockXpos ?
+	jg	@@test2
+	jmp @@return
+	
+	; test if the projxpos is lesser then the block's xpos + the block's width
+	@@test2:
+	xor eax,eax
+	mov ebx, [@@blockSprite]		; the block sprite is stored in ebx
+	mov eax, [ebx]					; eax is now the block's width
+	add ax, [@@blockXpos]			; eax is now the block's xpos + width
+	call vectorref, offset projectiles, [@@projectile], PROJXPOS
+	cmp dx, ax
+	jl @@test3
+	jmp @@return
+	
+	; test if the projypos + it's height is greater then the block's ypos
+	@@test3:
+	xor eax, eax
+	mov al, [edi + 2]				; projectile-height (stored in eax)
+	call vectorref, offset projectiles, [@@projectile], PROJYPOS
+	add dl, al					; edx is now the projypos + it's height
+	cmp dx, [@@blockYpos]
+	jg @@test4
+	jmp @@return
+	
+	; test if the projypos is lesser then the block's ypos + the block's height
+	@@test4:
+	xor eax,eax
+	mov eax, [ebx + 2]
+	add ax, [@@blockYpos]
+	call vectorref, offset projectiles, [@@projectile], PROJYPOS
+	cmp dx, ax
+	jl @@collides
+	jmp @@return
+	
+	@@collides:
+		call deleteProjectile, [@@projectile]
+		
+	@@return:
+		ret
+ENDP projectileCollisionWithBlock
+	
+; Test if a projectile collides with the room
+PROC projectileCollisionWithRoom
+	ARG		@@projectile:dword
+	USES 	eax, ebx, ecx, edx, edi, esi
+	
+	xor ecx,ecx
+	xor ebx,ebx
+	xor eax,eax
+	xor edi,edi
+	xor esi,esi
+	
+	mov cx, [offset currentRoom]	; index of the room that needs to be drawn
+	dec ecx
+	
+	mov edi, offset rooms
+	
+	cmp ecx,0
+	je @@index0
+	
+	@@goToRoomIndex:
+		add edi, 66
+		loop @@goToRoomIndex
+		
+	@@index0:
+		
+	mov ebx, 50		; the y begin position of every room
+	mov ecx, 6		; store the number of rows in ecx
+	mov esi, 10		; store the number of cols in esi
+	
+	add edi, 6		; move to the first room's sprite
+	
+	@@rowLoop:
+		push esi	; save the cols
+		xor eax,eax
+		@@colLoop:
+			push eax
+			mov al, [edi]	; The sprite that has to be collided with or not
+			
+			cmp al, 0
+			je @@noCollision	; no collision if there's no sprite
+			
+			cmp al, 3			; no collision if there's a floor
+			je @@noCollision
+			
+			pop eax
+			call projectileCollisionWithBlock, [@@projectile], eax, ebx, offset stone, offset horizontalWall
+			jmp @@endcolLoopIfCollided
+			
+			@@noCollision:
+			pop eax
+			@@endcolLoopIfCollided:
+			dec esi
+			inc edi
+			add eax, 32		; get eax to the next sprite x position
+			cmp esi, 0
+			jg @@colLoop
+		@@break:
+		pop esi
+		add ebx, 25
+		loop @@rowLoop
+		
+	ret
+ENDP projectileCollisionWithRoom
+
+; Test if projectile if out of border
+PROC testProjectileBoarders
+	ARG 	@@projectile:dword
+	USES 	eax, ebx, ecx, edx, edi
+	
+	xor eax, eax
+	xor ecx, ecx
+	xor edx, edx
+	xor edi, edi
+	
+	mov edi, offset stone	; projectile sprite
+	mov cl, [edi]			; projectile-width  (stored in ecx)
+	mov al, [edi + 2]		; projectile-height (stored in edx)
+	
+	call vectorref, offset projectiles, [@@projectile], PROJXPOS
+	cmp	dx, 0
+	jl	@@deleteProjectile
+	add dx, cx
+	cmp dx, GAMEWIDTH
+	jg @@deleteProjectile
+	
+	call vectorref, offset projectiles, [@@projectile], PROJYPOS
+	cmp edx, INVHEIGHT
+	jl @@deleteProjectile
+	add edx, eax
+	cmp edx, SCRHEIGHT
+	jg @@deleteProjectile
+	
+	jmp @@return	; if projectile was not out of border, return without deleting it
+	
+	@@deleteProjectile:
+		call deleteProjectile, [@@projectile]
+	
+	@@return:
+		ret
+ENDP testProjectileBoarders
+
+; Test collision for every projectile that is alive
+PROC testProjectileCollision
+	USES	ebx, ecx, edx
+	
+	mov ebx, offset projectiles
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of projectiles
+	
+	; find every living projectile and test collision on them
+	@@findProjectile:
+		call vectorref, offset projectiles, ecx, PROJALIVE
+		cmp edx, FALSE
+		je @@next	; if the projectile is dead, collision should not be tested
+		call projectileCollisionWithRoom, ecx
+		call testProjectileBoarders, ecx
+		@@next:
+		loop @@findProjectile
+		
+	@@return:
+		ret
+ENDP testProjectileCollision
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -398,42 +601,73 @@ PROC testBoarders
 	
 	call getPlayerData, CHARXPOS
 	cmp	dx, 0
-	jle	@@setToLeftScreen
+	jl	@@setToLeftScreen
 	add dx, cx
 	cmp dx, GAMEWIDTH
-	jge @@setToRightScreen
+	jg @@setToRightScreen
 	
 	jmp @@testYPOS
 	
 	@@setToLeftScreen:
-		call setPlayerData, CHARXPOS, 0
-		jmp @@testYPOS
-	
-	@@setToRightScreen:
+		call deleteAllProjectiles
+		push eax
+		mov edi, offset currentRoom
+		call getRoomDoorID, LEFT
+		xor eax,eax
+		xchg al, dl
+		mov [edi], al
+		pop eax
 		mov ebx, GAMEWIDTH
 		sub ebx, ecx
 		call setPlayerData, CHARXPOS, ebx
 		jmp @@testYPOS
 	
+	@@setToRightScreen:
+		call deleteAllProjectiles
+		push eax
+		mov edi, offset currentRoom
+		call getRoomDoorID, RIGHT
+		xor eax, eax
+		xchg al, dl
+		mov [edi], al
+		pop eax
+		mov ebx, GAMEWIDTH
+		sub ebx, ecx
+		call setPlayerData, CHARXPOS, 0
+		jmp @@testYPOS
+	
 	@@testYPOS:
 		call getPlayerData, CHARYPOS
 		cmp edx, INVHEIGHT
-		jle @@setToTopScreen
+		jl @@setToTopScreen
 		add edx, eax
-		; add edx, INVHEIGHT
 		cmp edx, SCRHEIGHT
-		jge @@setToBottomScreen
+		jg @@setToBottomScreen
 	
 		jmp @@return
 	
 	@@setToTopScreen:
-		call setPlayerData, CHARYPOS, INVHEIGHT
-		jmp @@return
-	
-	@@setToBottomScreen:
+		call deleteAllProjectiles
+		push eax
+		mov edi, offset currentRoom
+		call getRoomDoorID, UP
+		xor eax,eax
+		xchg al, dl
+		mov [edi], al
+		pop eax
 		mov ebx, SCRHEIGHT
 		sub ebx, eax
 		call setPlayerData, CHARYPOS, ebx
+		jmp @@return
+	
+	@@setToBottomScreen:
+		call deleteAllProjectiles
+		mov edi, offset currentRoom
+		call getRoomDoorID, DOWN
+		xor eax,eax
+		xchg al, dl
+		mov [edi], al
+		call setPlayerData, CHARYPOS, INVHEIGHT
 		jmp @@return
 	
 	@@return:
@@ -442,7 +676,43 @@ ENDP testBoarders
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-;; Room management
+;-------------------------------------------------------------------------------------------------
+
+; Room management
+
+; store the the desired door (left, right, up, down) roomID in edx
+PROC getRoomDoorID
+	ARG  @@doorSide:byte RETURNS edx
+	USES ebx, ecx
+	
+	xor ecx,ecx
+	mov cx, [offset currentRoom]
+	dec ecx
+	
+	mov ebx, offset rooms
+	
+	cmp cx, 0
+	je @@room1
+	
+	@@getToRoomIndex:
+		add ebx, 66
+		loop @@getToRoomIndex
+		
+	@@room1:
+	xor ecx,ecx
+	mov cl, [@@doorSide]
+	
+	@@getToDoorSide:
+		inc ebx
+		loop @@getToDoorSide
+		
+	; now set the current room to the room linked with this door (stored in ebx)
+	xor edx, edx
+	mov dl, [ebx]
+
+	ret
+ENDP getRoomDoorID
+
 
 PROC drawRoom
 	ARG 	@@roomData:dword
@@ -454,7 +724,7 @@ PROC drawRoom
 	xor edi,edi
 	xor esi,esi
 	
-	mov cl, [offset currentRoom]
+	mov cx, [offset currentRoom]
 	dec ecx					; store the id of the room you want to draw
 	mov ebx,[@@roomData]
 	
@@ -524,6 +794,168 @@ PROC drawRoom
 		
 	ret
 ENDP drawRoom
+
+PROC collisionWithBlock
+	ARG		@@blockXpos:word, @@blockYpos:word, @@sprite:dword, @@blockSprite:dword
+	USES eax, ebx, ecx, edx, edi
+	
+	xor eax, eax
+	xor ecx, ecx
+	xor edx, edx
+	xor edi, edi
+	
+	mov edi, [@@sprite]	; character
+	mov cl, [edi]		; character-width  (stored in ecx)
+	
+	; test if the charxpos + it's width is greater then the block's xpos
+	call getPlayerData, CHARXPOS
+	add dl, cl				; edx is now the charxpos + it's width
+	cmp dx, [@@blockXpos]		; charxpos + charwidth > blockXpos ?
+	jg	@@test2
+	jmp @@return
+	
+	; test if the charxpos is lesser then the block's xpos + the block's width
+	@@test2:
+	xor eax,eax
+	mov ebx, [@@blockSprite]		; the block sprite is stored in ebx
+	mov eax, [ebx]					; eax is now the block's width
+	add ax, [@@blockXpos]			; eax is now the block's xpos + width
+	call getPlayerData, CHARXPOS
+	cmp dx, ax
+	jl @@test3
+	jmp @@return
+	
+	; test if the charypos + it's height is greater then the block's ypos
+	@@test3:
+	xor eax, eax
+	mov al, [edi + 2]				; character-height (stored in eax)
+	call getPlayerData, CHARYPOS
+	add dl, al					; edx is now the charypos + it's height
+	cmp dx, [@@blockYpos]
+	jg @@test4
+	jmp @@return
+	
+	; test if the charypos is lesser then the block's ypos + the block's height
+	@@test4:
+	xor eax,eax
+	mov eax, [ebx + 2]
+	add ax, [@@blockYpos]
+	call getPlayerData, CHARYPOS
+	cmp dx, ax
+	jl @@collides
+	jmp @@return
+	
+	@@collides:
+		call getPlayerData, CHARDIR
+		cmp dx, LEFT
+		je @@setToRightOfBlock
+	
+		cmp dx, RIGHT
+		je @@setToLeftOfBlock
+	
+		cmp dx, UP
+		je @@setToBottomOfBlock
+	
+		cmp dx, DOWN
+		je @@setToTopOfBlock
+	
+	jmp @@return
+	
+	; charxpos = block's xpos + block's width
+	@@setToRightOfBlock:
+		xor eax,eax
+		mov eax, [ebx]					; eax is now the block's width
+		add ax, [@@blockXpos]			; eax is now the blokc's xpos + width
+		call setPlayerData, CHARXPOS, eax
+		jmp @@return
+		
+	; charxpos = block's xpos - char's width
+	@@setToLeftOfBlock:
+		xor eax, eax
+		mov ax, [@@blockXpos]
+		sub ax, [edi]
+		call setPlayerData, CHARXPOS, eax
+		jmp @@return
+		
+	@@setToBottomOfBlock:
+		xor eax, eax
+		mov ax, [@@blockYpos]
+		add ax, [edi + 2]
+		call setPlayerData, CHARYPOS, eax
+		jmp @@return
+		
+	@@setToTopOfBlock:
+		xor eax, eax
+		mov ax, [@@blockYpos]
+		sub ax, [edi + 2]
+		call setPlayerData, CHARYPOS, eax
+		
+	@@return:
+		ret
+ENDP collisionWithBlock
+	
+
+PROC collisionWithRoom
+	USES eax, ebx, ecx, edx, edi, esi
+	
+	xor ecx,ecx
+	xor ebx,ebx
+	xor eax,eax
+	xor edi,edi
+	xor esi,esi
+	
+	mov cx, [offset currentRoom]	; index of the room that needs to be drawn
+	dec ecx
+	
+	mov edi, offset rooms
+	
+	cmp ecx,0
+	je @@index0
+	
+	@@goToRoomIndex:
+		add edi, 66
+		loop @@goToRoomIndex
+		
+	@@index0:
+		
+	mov ebx, 50		; the y begin position of every room
+	mov ecx, 6		; store the number of rows in ecx
+	mov esi, 10		; store the number of cols in esi
+	
+	add edi, 6		; move to the first room's sprite
+	
+	@@rowLoop:
+		push esi	; save the cols
+		xor eax,eax
+		@@colLoop:
+			push eax
+			mov al, [edi]	; The sprite that has to be collided with or not
+			
+			cmp al, 0
+			je @@noCollision	; no collision if there's no sprite
+			
+			cmp al, 3			; no collision if there's a floor
+			je @@noCollision
+			
+			pop eax
+			call collisionWithBlock, eax, ebx, offset character, offset horizontalWall
+			jmp @@endcolLoopIfCollided
+			
+			@@noCollision:
+			pop eax
+			@@endcolLoopIfCollided:
+			dec esi
+			inc edi
+			add eax, 32		; get eax to the next sprite x position
+			cmp esi, 0
+			jg @@colLoop
+		@@break:
+		pop esi
+		add ebx, 25
+		loop @@rowLoop
+		
+	ret
+ENDP collisionWithRoom
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1083,6 +1515,9 @@ PROC main
 	
 		call updateVideoBuffer, offset screenBuffer
 		
+		; test collision for every projectile
+		call testProjectileCollision
+		
 		; test if we died and have to return to the menu
 		mov al, [offset gamestarted]
 		cmp al, FALSE
@@ -1145,7 +1580,7 @@ DATASEG
 					
 	playerlen		dw	5
 					;	x-pos, y-pos, lives		direction	shooting?
-	playerdata		dw	 150, 	170, 	6,		1,			0
+	playerdata		dw	 150, 	120, 	6,		1,			0
 	
 	gamelen			dd	6	; length of gamedata array
 	gamedata		dd	150 ; character x-position
@@ -1158,8 +1593,8 @@ DATASEG
 	projectiles		dw 	10, 5	; amount of projectiles, amount of information per projectile
 							
 							; alive, x-pos, y-pos,	direction,	collision?
-					dw		1,		150,		180,		1,			0
-					dw		1,		50,		60,		2,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
@@ -1378,7 +1813,7 @@ DATASEG
 			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
 			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
 			
-	rooms	DB 1, 0, 0, 2, 0, 0
+	rooms	DB 1, 0, 2, 0, 0, 0
 			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,3
@@ -1386,7 +1821,7 @@ DATASEG
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,2,1,2,1,2,1
 			
-			DB 2, 1, 0, 0, 0, 0
+			DB 2, 1, 0, 0, 5, 0
 			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 3,3,3,3,3,3,3,3,3,2
@@ -1394,13 +1829,61 @@ DATASEG
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,3,3,2,1,2,1
 			
-			DB 3, 0, 0, 0, 2, 0
+			DB 3, 0, 0, 0, 6, 0
 			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,3,3,1,2,1,1
+
+			DB 4, 0, 5, 0, 7, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,1,2,1,1
+
+			DB 5, 4, 6, 2, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 6, 5, 0, 3, 9, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,1,2,1,1
+
+			DB 7, 0, 0, 4, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 8, 0, 9, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 9, 8, 0, 6, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
 				
 ; -------------------------------------------------------------------
 
