@@ -35,13 +35,12 @@ GRIdwIDTH	EQU 32	; width of the grid
 GRIDHEIGHT	EQU 25	; height of the grid
 
 ; Indexes of projectile information in "projectiles" array
-P1	EQU	1
-P1	EQU	1
-P1	EQU	1
-P1	EQU	1
-P1	EQU	1
-P1	EQU	1
-P1	EQU	1
+PROJALIVE		EQU	1
+PROJXPOS		EQU	2
+PROJYPOS		EQU 3
+PROJDIRECTION	EQU	4
+PROJCOLLISION	EQU	5
+
 
 KEYCNT EQU 89		; number of keys to track
 
@@ -205,7 +204,7 @@ ENDP decreaseHealth
 
 ; Get the information from an element from an array containing game data
 PROC vectorref
-	ARG		@@array:dword, @@element, dword, @@information:dword	RETURNS	edx
+	ARG		@@array:dword, @@element: dword, @@information:dword	RETURNS	edx
 	USES	ebx, ecx
 	
 	mov ebx, [@@array]
@@ -227,7 +226,8 @@ PROC vectorref
 		add ebx, 2				; get to next piece of information
 		loop @@getToInformation	; loop until the correct information is reached
 	
-	mov edx, [ebx]
+	xor edx, edx
+	mov dx, [ebx]
 	ret	
 ENDP vectorref
 
@@ -687,127 +687,145 @@ ENDP drawNSprites
 
 PROC handleSprites
 	ARG		@@data:dword, @@sprite:dword
-	USES	eax, ebx, ecx, edx, edi
+	USES	eax, ebx, ecx, edx;, edi
 	
-	xor ecx, ecx
+	mov ebx, [@@data]	; pointer to array
+	mov ecx, [ebx]		; amount of elements
 	
-	
-	mov edi, [@@data]	; store the data array in edi
-	mov cl, [edi]		; store the number of elements in ecx
-	add edi, 4
-	
-	xor eax,eax
-	xor ebx,ebx
-	@@foreach:
-			push ecx
-			mov cl, [edi]
-			cmp cl, 0			; test if the element must be drawn
-			je @@aliveBreak
-			
-			inc edi
-			mov eax, [edi]	; the x position in eax
-			inc edi
-			mov ebx, [edi]	; the y position in ebx
-			; draw the sprite
-			call	drawSprite, eax, ebx, [@@sprite], offset screenBuffer
-			
-			inc edi
-			mov al, [edi]	; the direction in eax
-			
-			jmp @@tests			
-			
-			@@endTests:
-			inc edi
-			jmp @@continue
-			
-			@@aliveBreak:
-			add edi,4   	; we still need to add 4 to go to the next element
-			@@continue:
-			pop ecx
-			loop @@foreach
-			jmp @@return
-			
-	@@tests:
-		cmp eax, 0
-		je @@endTests
-	
-		cmp eax, 1	; test if it needs to go left
-		je @@moveLeft
-			
-		cmp eax, 2	; test if it needs to go right
-		je @@moveRight
-			
-		cmp eax, 3		; test if it needs to go up
-		je @@moveUp
-			
-		cmp eax, 4	; test if it needs to go down
-		je @@moveDown
+	@@findElements:	; find the elements that need to be drawn
+		call vectorref, [@@data], ecx, PROJALIVE
+		cmp edx, 1
+		je @@drawProjectile
+		loop @@findElements
 		
-		jmp @@endTests
-			
-		@@moveLeft:
-			push edi
-			sub edi, 2				; store the x position of the object in edi
-			call moveObject, edi, 0	; 0 means decreasing
-			pop edi
-			jmp @@endTests
-				
-		@@moveRight:
-			push edi
-			sub edi, 2				; store the x position of the object in edi	
-			call moveObject, edi, 1	; 1 means increase
-			pop edi
-			jmp @@endTests
-				
-		@@moveUp:
-			push edi
-			dec edi					; store the y position of the object in edi
-			call moveObject, edi, 0	; 0 means decreasing
-			pop edi
-			jmp @@endTests
-				
-		@@moveDown:
-			push edi
-			dec edi					; store the y position of the object in edi
-			call moveObject, edi, 1	; 1 means increasing
-			pop edi
-			jmp @@endTests
+	jmp @@noAvailableElement
+		
+	@@drawProjectile:
+		xor eax, eax
+		call vectorref, [@@data], ecx, PROJXPOS
+		mov eax, edx
+		call vectorref, [@@data], ecx, PROJYPOS
+		call drawSprite, eax, edx, [@@sprite], offset screenBuffer
+		dec ecx
+		jmp @@findElements
+		
+	@@noAvailableElement:
+		ret
+		
+	; xor ecx, ecx
 	
-	@@return:
-	ret
+	; mov edi, [@@data]	; store the data array in edi
+	; mov cl, [edi]		; store the number of elements in ecx
+	; add edi, 4
+	
+	; xor eax,eax
+	; xor ebx,ebx
+	; @@foreach:
+			; push ecx
+			; mov cl, [edi]
+			; cmp cl, 0			; test if the element must be drawn
+			; je @@aliveBreak
+			
+			; inc edi
+			; mov eax, [edi]	; the x position in eax
+			; inc edi
+			; mov ebx, [edi]	; the y position in ebx
+			;;draw the sprite
+			; call	drawSprite, eax, ebx, [@@sprite], offset screenBuffer
+			
+			; inc edi
+			; mov al, [edi]	; the direction in eax
+			
+			; jmp @@tests			
+			
+			; @@endTests:
+			; inc edi
+			; jmp @@continue
+			
+			; @@aliveBreak:
+			; add edi,4   	; we still need to add 4 to go to the next element
+			; @@continue:
+			; pop ecx
+			; loop @@foreach
+			; jmp @@return
+			
+	; @@tests:
+		; cmp eax, 0
+		; je @@endTests
+	
+		; cmp eax, 1	; test if it needs to go left
+		; je @@moveLeft
+			
+		; cmp eax, 2	; test if it needs to go right
+		; je @@moveRight
+			
+		; cmp eax, 3		; test if it needs to go up
+		; je @@moveUp
+			
+		; cmp eax, 4	; test if it needs to go down
+		; je @@moveDown
+		
+		; jmp @@endTests
+			
+		; @@moveLeft:
+			; push edi
+			; sub edi, 2				; store the x position of the object in edi
+			; call moveObject, edi, 0	; 0 means decreasing
+			; pop edi
+			; jmp @@endTests
+				
+		; @@moveRight:
+			; push edi
+			; sub edi, 2				; store the x position of the object in edi	
+			; call moveObject, edi, 1	; 1 means increase
+			; pop edi
+			; jmp @@endTests
+				
+		; @@moveUp:
+			; push edi
+			; dec edi					; store the y position of the object in edi
+			; call moveObject, edi, 0	; 0 means decreasing
+			; pop edi
+			; jmp @@endTests
+				
+		; @@moveDown:
+			; push edi
+			; dec edi					; store the y position of the object in edi
+			; call moveObject, edi, 1	; 1 means increasing
+			; pop edi
+			; jmp @@endTests
+	
+	; @@return:
+	; ret
 ENDP handleSprites
 
 
 
 PROC moveObject
-	ARG		@@data:dword, @@increase:byte
+	ARG		@@POS:dword, @@increase:byte
 	USES	eax, ebx, ecx
 	
 	xor eax,eax
 	xor ecx,ecx
-	mov ebx, [@@data]		
+	mov ebx, [@@POS]		
 	mov eax, [ebx]			; eax is the position that needs to be changed
-	movzx ecx, [@@increase]	; ecx is the increasing boolean
 	
-	cmp ecx, 1
+	cmp [@@increase], 1
 	je @@increaseValue
 	
 	cmp ecx, 0
 	je @@decreaseValue
 	
-	jmp @@return
-	
 	@@increaseValue:
 		add eax, 4
-		mov [ebx], eax 		; replace the position with the new value
 		jmp @@return
 		
 	@@decreaseValue:
 		sub eax, 4
-		mov [ebx], eax		; replace the position with the new value
 		jmp @@return
 		
 	@@return:
+	
 	ret
 ENDP moveObject
 
@@ -856,6 +874,17 @@ PROC main
 		;call	drawSprite, 50, 100, offset stone, offset screenBuffer
 	
 		; call	handleSprites, offset projectiles, offset stone
+		
+		; vectorref & vectorset test
+		; call vectorref, offset projectiles, 1, PROJXPOS
+		; mov ecx, edx
+		; call vectorref, offset projectiles, 1, PROJYPOS
+		; call vectorset, offset projectiles, 1, PROJXPOS, 50
+		; call vectorset, offset projectiles, 1, PROJYPOS, 100
+		; call vectorref, offset projectiles, 1, PROJXPOS
+		; mov ecx, edx
+		; call vectorref, offset projectiles, 1, PROJYPOS
+		; call drawSprite, ecx, edx, offset stone, offset screenBuffer
 	
 		; Handle everything concerning the player
 		call handlePlayer
@@ -916,7 +945,7 @@ DATASEG
 	projectiles		dw 	10, 5	; amount of projectiles, information per projectile
 							
 							; alive, x-pos, y-pos,	direction,	collision?
-					dw		0,		0,		0,		0,			0
+					dw		0,		150,		180,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
