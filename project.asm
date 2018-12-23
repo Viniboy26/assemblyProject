@@ -15,6 +15,10 @@ GAMEHEIGHT	EQU 150
 INVWIDTH	EQU 320
 INVHEIGHT	EQU 50
 
+; Booleans
+TRUE		EQU	1
+FALSE		EQU 0
+
 STILL		EQU	0
 LEFT		EQU 1
 RIGHT		EQU 2
@@ -22,13 +26,14 @@ UP			EQU 3
 DOWN		EQU 4
 
 ; character speed
-CHARSPEED	EQU 5
+CHARSPEED	EQU 6
 
 ; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
 CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
 CHARDIR		EQU 4	; character's direction
+CHARSHOOT	EQU	5	; boolean, test if charater is shooting
 ENEMY1XPOS	EQU	4
 ENEMY1YPOS	EQU 5
 CHARWIDTH	EQU 25	; character width
@@ -214,7 +219,7 @@ PROC vectorref
 	USES	ebx, ecx
 	
 	mov ebx, [@@array]
-	add ebx, 2	; skip amount of elements
+	add ebx, 2	; skip amount of elements and information per element
 	mov ecx, [@@element]
 	dec ecx
 	cmp ecx, 0
@@ -243,7 +248,7 @@ PROC vectorset
 	USES	ebx, ecx
 	
 	mov ebx, [@@array]
-	add ebx, 2	; skip amount of elements
+	add ebx, 2	; skip amount of elements and information per element
 	mov ecx, [@@element]
 	dec ecx
 	cmp ecx, 0
@@ -271,11 +276,46 @@ ENDP vectorset
 
 ;; Projectile management
 
-; Returns the first available element in projectiles array (i.e. alive = 0)
-; PROC getAvailableProjectile
+; Shoots a projectile
+PROC shootProjectile
+	USES	eax, ebx, ecx, edx
 	
-	; mov ebx, offset projectiles
-; ENDP getAvailableProjectile
+	; test if the player is already shooting, if so, don't shoot again
+	call getPlayerData, CHARSHOOT
+	cmp dx, TRUE
+	je @@return
+	
+	mov ebx, offset projectiles
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of projectiles
+	
+	; find the first available projectile in projectiles array (i.e. alive = 0)
+	@@findProjectile:
+		call vectorref, offset projectiles, ecx, PROJALIVE
+		cmp edx, FALSE
+		je @@projectileFound	; if the projectile is dead it means it is available
+		loop @@findProjectile	; if not available, search for the next one
+		
+	jmp @@return	; if we didn't find any available projectile, return without doing anything
+		
+	@@projectileFound:
+	; get current player's position and direction to give it to the projectile
+	xor eax, eax
+	call getPlayerData, CHARXPOS ; stores the player's x-position in edx
+	mov ax, dx
+	xor ebx, ebx
+	call getPlayerData, CHARYPOS ; stores the player's y-position in edx
+	mov bx, dx
+	call getPlayerData, CHARDIR	; stores the player's direction in edx
+	; change the values of the projectile
+	call vectorset, offset projectiles, ecx, PROJALIVE, 1
+	call vectorset, offset projectiles, ecx, PROJXPOS, eax
+	call vectorset, offset projectiles, ecx, PROJYPOS, ebx
+	call vectorset, offset projectiles, ecx, PROJDIRECTION, edx
+	
+	@@return:
+		ret
+ENDP shootProjectile
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -386,6 +426,91 @@ PROC testBoarders
 	@@return:
 		ret
 ENDP testBoarders
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Room management
+
+PROC drawRoom
+	ARG 	@@roomData:dword
+	USES 	eax, ebx, ecx, edx, edi, esi
+	
+	xor ecx,ecx
+	xor ebx,ebx
+	xor eax,eax
+	xor edi,edi
+	xor esi,esi
+	
+	mov cl, [offset currentRoom]
+	dec ecx					; store the id of the room you want to draw
+	mov ebx,[@@roomData]
+	
+	cmp ecx, 0 
+	je @@index0
+	
+	@@goToRoomIndex:
+		add ebx, 66
+		loop @@goToRoomIndex
+		
+	@@index0:
+	
+	mov edi, 50		; the y begin position of every room
+	mov ecx, 6		; store the number of rows in ecx
+	mov esi, 10		; store the number of cols in esi
+	
+	add ebx, 6		; move to the first room's sprite
+	
+	@@rowLoop:
+		push esi	; save the cols
+		xor eax,eax
+		@@colLoop:
+			push eax
+			mov al, [ebx]	; The sprite that has to be drawn
+			
+			cmp al, 0
+			je @@endcolLoop	; draw no sprite if 0
+			
+			cmp al, 1
+			je @@drawHorWall	; draw horizontallWall if 1
+			
+			cmp al, 2
+			je @@drawHorWall2
+			
+			cmp al, 3
+			je @@drawFloor
+			
+			jmp @@endcolLoop
+			
+			@@drawHorWall:
+				pop eax
+				call drawSprite, eax, edi, offset horizontalWall, offset screenBuffer
+				jmp @@endcolLoopIfDrawn
+				
+			@@drawHorWall2:
+				pop eax
+				call drawSprite, eax, edi, offset horizontalWall2, offset screenBuffer
+				jmp @@endcolLoopIfDrawn
+				
+			@@drawFloor:
+				pop eax
+				call drawSprite, eax, edi, offset floor, offset screenBuffer
+				jmp @@endcolLoopIfDrawn
+			
+			@@endcolLoop:
+			pop eax
+			@@endcolLoopIfDrawn:
+			dec esi
+			inc ebx
+			add eax, 32		; get eax to the next sprite x position
+			cmp esi, 0
+			jg @@colLoop
+		@@break:
+		pop esi
+		add edi, 25
+		loop @@rowLoop
+		
+	ret
+ENDP drawRoom
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -539,7 +664,11 @@ PROC keyboardFunction
 	; spacebar
 	mov bl, [offset __keyb_keyboardState + 39h]	; obtain corresponding key state
 	cmp bl, 1
-	je @@decreaseHealth
+	je @@shootProjectile
+	
+	; if spacebar isn't pressed, the player is not shooting
+	call setPlayerData, CHARSHOOT, FALSE
+	
 	
 	; If no key has been pressed, return without doing anything
 	jmp @@return
@@ -566,8 +695,9 @@ PROC keyboardFunction
 		call moveDown
 		jmp @@return
 	
-	@@decreaseHealth:
-		call decreaseHealth
+	@@shootProjectile:
+		call shootProjectile
+		call setPlayerData, CHARSHOOT, TRUE
 		jmp @@return
 	
 	@@return:
@@ -728,7 +858,7 @@ PROC handleSprites
 		@@nextElement:
 		loop @@findElements
 		
-		jmp @@return
+		jmp @@return ; once looped over all elements, return out of the function
 		
 		@@moveLeft:
 			call moveObject, [@@data], ecx, LEFT
@@ -840,6 +970,7 @@ PROC main
 	
 	
 		;call	drawSprite, 50, 100, offset stone, offset screenBuffer
+		call	drawRoom, offset rooms
 	
 		call	handleSprites, offset projectiles, offset stone
 		
@@ -875,7 +1006,7 @@ PROC main
 		call fillBackground, 0	; delete everything
 		call drawSprite, 0, 0, offset menu, offset screenBuffer
 		call updateVideoBuffer, offset screenBuffer	; draw menu
-		call setPlayerData, CHARLIVES, 3 ; set lives to 3 again for the next game
+		call setPlayerData, CHARLIVES, 6 ; set lives to 6 again for the next game
 		call selectOption, offset gamestarted, 0 ; set boolean equal to 0 again
 		jmp @@menuloop	; jump back to the menu loop
 	
@@ -888,6 +1019,8 @@ ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
+	currentRoom		dw 1	; room the player is in
+	
 	gamestarted		db 0	; boolean to test if game has started
 
 	menuoption		db 1	; holds the current menu option
@@ -898,27 +1031,27 @@ DATASEG
 					db 2Ah, 00H, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
 					db 1Dh, 0h, 38h,  				39h,  				0h, 0h, 0h, 1Dh,  		4Bh, 50h, 4Dh,  52h, 53h
 					
-	playerlen		dw	4
-					;	x-pos, y-pos, lives		direction
-	playerdata		dw	 150, 	170, 	3,		1
+	playerlen		dw	5
+					;	x-pos, y-pos, lives		direction	shooting?
+	playerdata		dw	 150, 	170, 	6,		1,			0
 	
 	gamelen			dd	6	; length of gamedata array
 	gamedata		dd	150 ; character x-position
 					dd	170 ; character y-position
-					dd 	3	; number of lives
+					dd 	3	; number of lives	
 					dd	100
 					dd	80
 					dd  0   ; number of projectiles alive
 					
-	projectiles		dw 	10, 5	; amount of projectiles, information per projectile
+	projectiles		dw 	10, 5	; amount of projectiles, amount of information per projectile
 							
 							; alive, x-pos, y-pos,	direction,	collision?
 					dw		1,		150,		180,		1,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
 					dw		1,		50,		60,		2,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
+					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
 					dw		0,		0,		0,		0,			0
@@ -1051,6 +1184,111 @@ DATASEG
 				db 00H,18H,18H,18H,18H,00H
 				db 00H,18H,18H,18H,18H,00H
 				db 2FH,00H,00H,00H,00H,2FH
+				
+	horizontalWall	DW 32,25
+					DB 08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,08H,08H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+					DB 08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H,08H
+					
+	horizontalWall2	DW 32,25
+					DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+					DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,16H,16H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H,07H
+					DB 16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H,16H
+					
+	floor	DW 32,25
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
+			
+	rooms	DB 1, 0, 0, 2, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+			
+			DB 2, 1, 0, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+			
+			DB 3, 0, 0, 0, 2, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,1,2,1,1
 				
 ; -------------------------------------------------------------------
 
