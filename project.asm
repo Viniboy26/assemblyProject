@@ -15,6 +15,10 @@ GAMEHEIGHT	EQU 150
 INVWIDTH	EQU 320
 INVHEIGHT	EQU 50
 
+; Grid dimensions
+GRIDWIDTH	EQU 32	; width of the grid
+GRIDHEIGHT	EQU 25	; height of the grid
+
 ; Booleans
 TRUE		EQU	1
 FALSE		EQU 0
@@ -27,7 +31,7 @@ UP			EQU 3
 DOWN		EQU 4
 
 ; character constants
-CHARSPEED	EQU 15	; 6	
+CHARSPEED	EQU 6	
 CHARWIDTH	EQU 25	; character width
 CHARHEIGHT	EQU 25	; character height
 CHARCOLOR	EQU 40 	; character color
@@ -39,20 +43,23 @@ CHARLIVES	EQU 3 	; number of lives character has
 CHARDIR		EQU 4	; character's direction
 CHARSHOOT	EQU	5	; boolean, test if charater is shooting
 
-ENEMY1XPOS	EQU	4
-ENEMY1YPOS	EQU 5
-GRIdwIDTH	EQU 32	; width of the grid
-GRIDHEIGHT	EQU 25	; height of the grid
 
 ; projectile constants
 PROJSPEED 		EQU	7
 
-; Indexes of projectile information in "projectiles" array
-PROJALIVE		EQU	1
-PROJXPOS		EQU	2
-PROJYPOS		EQU 3
-PROJDIRECTION	EQU	4
-PROJCOLLISION	EQU	5
+; enemy constants
+ENEMY1XPOS		EQU	50
+ENEMY1YPOS		EQU	80
+ENEMY2XPOS		EQU	220
+ENEMY2YPOS		EQU	150
+	
+; Indexes of gamedata information in "projectiles" and "enemies" array
+ELEMALIVE		EQU	1
+ELEMXPOS		EQU	2
+ELEMYPOS		EQU 3
+ELEMDIR			EQU	4
+ELEMCOLLISION	EQU	5
+ELEMLIVES		EQU	6
 
 ; number of keys to track
 KEYCNT EQU 89
@@ -233,7 +240,7 @@ PROC vectorref
 	je @@elementzero
 	
 	@@getToElement:
-		add ebx, 10 			; go to next element
+		add ebx, 12 			; go to next element
 		loop @@getToElement 	; loop until the correct element is reached
 		
 	@@elementzero:
@@ -262,7 +269,7 @@ PROC vectorset
 	je @@elementzero
 	
 	@@getToElement:
-		add ebx, 10 			; go to next element
+		add ebx, 12 			; go to next element
 		loop @@getToElement 	; loop until the correct element is reached
 		
 	@@elementzero:
@@ -298,7 +305,7 @@ PROC shootProjectile
 	
 	; find the first available projectile in projectiles array (i.e. alive = false)
 	@@findProjectile:
-		call vectorref, offset projectiles, ecx, PROJALIVE
+		call vectorref, offset projectiles, ecx, ELEMALIVE
 		cmp edx, FALSE
 		je @@projectileFound	; if the projectile is dead it means it is available
 		loop @@findProjectile	; if not available, continue search
@@ -315,10 +322,10 @@ PROC shootProjectile
 	mov bx, dx
 	call getPlayerData, CHARDIR	; stores the player's direction in dx
 	; change the values of the projectile
-	call vectorset, offset projectiles, ecx, PROJALIVE, TRUE
-	call vectorset, offset projectiles, ecx, PROJXPOS, eax
-	call vectorset, offset projectiles, ecx, PROJYPOS, ebx
-	call vectorset, offset projectiles, ecx, PROJDIRECTION, edx
+	call vectorset, offset projectiles, ecx, ELEMALIVE, TRUE
+	call vectorset, offset projectiles, ecx, ELEMXPOS, eax
+	call vectorset, offset projectiles, ecx, ELEMYPOS, ebx
+	call vectorset, offset projectiles, ecx, ELEMDIR, edx
 	
 	@@return:
 		ret
@@ -327,7 +334,7 @@ ENDP shootProjectile
 ; Deletes a projectile
 PROC deleteProjectile
 	ARG		@@projectile:dword
-	call vectorset, offset projectiles, [@@projectile], PROJALIVE, FALSE
+	call vectorset, offset projectiles, [@@projectile], ELEMALIVE, FALSE
 	ret
 ENDP deleteProjectile
 
@@ -341,7 +348,7 @@ PROC deleteAllProjectiles
 	
 	; find every living projectile and delete them
 	@@findProjectile:
-		call vectorref, offset projectiles, ecx, PROJALIVE
+		call vectorref, offset projectiles, ecx, ELEMALIVE
 		cmp edx, FALSE
 		je @@next	; projectile is already dead
 		call deleteProjectile, ecx
@@ -366,39 +373,39 @@ PROC projectileCollisionWithBlock
 	mov cl, [edi]		; projectile width  (stored in ecx)
 	
 	; test if the charxpos + it's width is greater then the block's xpos
-	call vectorref, offset projectiles, [@@projectile], PROJXPOS
-	add dl, cl				; edx is now the projxpos + it's width
-	cmp dx, [@@blockXpos]		; projxpos + projwidth > blockXpos ?
+	call vectorref, offset projectiles, [@@projectile], ELEMXPOS
+	add dl, cl				; edx is now the ELEMXPOS + it's width
+	cmp dx, [@@blockXpos]		; ELEMXPOS + projwidth > blockXpos ?
 	jg	@@test2
 	jmp @@return
 	
-	; test if the projxpos is lesser then the block's xpos + the block's width
+	; test if the ELEMXPOS is lesser then the block's xpos + the block's width
 	@@test2:
 	xor eax,eax
 	mov ebx, [@@blockSprite]		; the block sprite is stored in ebx
 	mov eax, [ebx]					; eax is now the block's width
 	add ax, [@@blockXpos]			; eax is now the block's xpos + width
-	call vectorref, offset projectiles, [@@projectile], PROJXPOS
+	call vectorref, offset projectiles, [@@projectile], ELEMXPOS
 	cmp dx, ax
 	jl @@test3
 	jmp @@return
 	
-	; test if the projypos + it's height is greater then the block's ypos
+	; test if the ELEMYPOS + it's height is greater then the block's ypos
 	@@test3:
 	xor eax, eax
 	mov al, [edi + 2]				; projectile-height (stored in eax)
-	call vectorref, offset projectiles, [@@projectile], PROJYPOS
-	add dl, al					; edx is now the projypos + it's height
+	call vectorref, offset projectiles, [@@projectile], ELEMYPOS
+	add dl, al					; edx is now the ELEMYPOS + it's height
 	cmp dx, [@@blockYpos]
 	jg @@test4
 	jmp @@return
 	
-	; test if the projypos is lesser then the block's ypos + the block's height
+	; test if the ELEMYPOS is lesser then the block's ypos + the block's height
 	@@test4:
 	xor eax,eax
 	mov eax, [ebx + 2]
 	add ax, [@@blockYpos]
-	call vectorref, offset projectiles, [@@projectile], PROJYPOS
+	call vectorref, offset projectiles, [@@projectile], ELEMYPOS
 	cmp dx, ax
 	jl @@collides
 	jmp @@return
@@ -488,14 +495,14 @@ PROC testProjectileBoarders
 	mov cl, [edi]			; projectile-width  (stored in ecx)
 	mov al, [edi + 2]		; projectile-height (stored in edx)
 	
-	call vectorref, offset projectiles, [@@projectile], PROJXPOS
+	call vectorref, offset projectiles, [@@projectile], ELEMXPOS
 	cmp	dx, 0
 	jl	@@deleteProjectile
 	add dx, cx
 	cmp dx, GAMEWIDTH
 	jg @@deleteProjectile
 	
-	call vectorref, offset projectiles, [@@projectile], PROJYPOS
+	call vectorref, offset projectiles, [@@projectile], ELEMYPOS
 	cmp edx, INVHEIGHT
 	jl @@deleteProjectile
 	add edx, eax
@@ -521,7 +528,7 @@ PROC testProjectileCollision
 	
 	; find every living projectile and test collision on them
 	@@findProjectile:
-		call vectorref, offset projectiles, ecx, PROJALIVE
+		call vectorref, offset projectiles, ecx, ELEMALIVE
 		cmp edx, FALSE
 		je @@next	; if the projectile is dead, collision should not be tested
 		call projectileCollisionWithRoom, ecx
@@ -532,6 +539,96 @@ PROC testProjectileCollision
 	@@return:
 		ret
 ENDP testProjectileCollision
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Enemies management (problems were not solved so we don't use any of these functions)
+
+; Kill an enemy
+; PROC killEnemy
+	; ARG		@@enemy:dword
+	; call vectorset, offset enemies, [@@enemy], ELEMALIVE, FALSE
+	; ret
+; ENDP killEnemy
+
+; Delete all enemies
+; PROC deleteAllEnemies
+	; USES	ebx, ecx, edx
+	
+	; mov ebx, offset enemies
+	; xor ecx, ecx
+	; mov cx, [ebx]	; amount of enemies
+	
+	; @@killenemies:
+		; call killEnemy, ecx
+		; loop @@killenemies
+		
+	; @@return:
+		; ret
+; ENDP deleteAllEnemies
+
+
+; PROC followChar
+	; ARG 	@@enemy:dword, @@xpos: dword, @@ypos: dword
+	; USES 	edx
+	
+	; call vectorref, offset enemies, [@@enemy], ELEMXPOS
+	
+	; cmp edx, [@@xpos]
+	; jl @@increasexpos ; Increase it's position if it's lesser 
+	; jg @@decreasexpos ; Decrease it's position if it's greater
+	
+	; jmp @@ypostest
+	
+	; @@increasexpos:
+		; inc edx
+		; call vectorset, [@@enemy], ELEMXPOS, edx
+		; jmp @@ypostest
+	
+	; @@decreasexpos:
+		; dec edx
+		; call vectorset, [@@enemy], ELEMXPOS, edx
+		; jmp @@ypostest
+	
+	; @@ypostest:
+		; call vectorref, offset enemies, [@@enemy], ELEMYPOS
+		; cmp edx, [@@ypos]
+		; jl @@increaseypos
+		; jg @@decreaseypos
+	
+		; jmp @@return
+	
+	; @@increaseypos:
+		; inc edx
+		; call vectorset, [@@enemy], ELEMYPOS, edx
+		; jmp @@return
+	
+	; @@decreaseypos:
+		; dec edx
+		; call vectorset, [@@enemy], ELEMYPOS, edx
+		; jmp @@return
+	
+	; @@return:
+		; ret		
+; ENDP followChar
+
+; PROC enemiesFollow
+	; USES	eax, ebx, ecx, edx
+	
+	; mov ebx, offset enemies
+	; xor ecx, ecx
+	; mov cx, [ebx]
+	
+	; @@loopEnemy:
+		; xor eax, eax
+		; call getPlayerData, CHARXPOS
+		; mov ax, dx
+		; call getPlayerData, CHARYPOS
+		; call followChar, ecx, eax, edx
+		; loop @@loopEnemy
+	; ret
+; ENDP enemiesFollow
+
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1275,49 +1372,6 @@ ENDP terminateProcess
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-; PROC followChar
-	; ARG @@xpos: dword, @@ypos: dword
-	; USES edx
-	
-	; call getGamedataElement, ENEMY1XPOS
-	
-	; cmp edx, [@@xpos]
-	; jl @@increasexpos ; Increase it's position if it's lesser 
-	; jg @@decreasexpos ; Decrease it's position if it's greater
-	
-	; jmp @@ypostest
-	
-	; @@increasexpos:
-		; inc edx
-		; call setGamedataElement, ENEMY1XPOS, edx
-		; jmp @@ypostest
-	
-	; @@decreasexpos:
-		; dec edx
-		; call setGamedataElement, ENEMY1XPOS, edx
-		; jmp @@ypostest
-	
-	; @@ypostest:
-		; call getGamedataElement, ENEMY1YPOS
-		; cmp edx, [@@ypos]
-		; jl @@increaseypos
-		; jg @@decreaseypos
-	
-		; jmp @@return
-	
-	; @@increaseypos:
-		; inc edx
-		; call setGamedataElement, ENEMY1YPOS, edx
-		; jmp @@return
-	
-	; @@decreaseypos:
-		; dec edx
-		; call setGamedataElement, ENEMY1YPOS, edx
-		; jmp @@return
-	
-	; @@return:
-		; ret		
-; ENDP followChar
 
 PROC drawBackground
 	USES 	eax, ebx, ecx, edx, edi
@@ -1368,18 +1422,18 @@ PROC handleSprites
 	mov cx, [ebx]		; amount of elements
 	
 	@@findElements:	; find the elements that need to be drawn and draw them
-		call vectorref, [@@data], ecx, PROJALIVE
+		call vectorref, [@@data], ecx, ELEMALIVE
 		cmp edx, 0	; if the element isn't alive, don't do anything and skip to next element
 		je @@nextElement
 		xor eax, eax
 		
 		; get x- and y-position and draw the sprite
-		call vectorref, [@@data], ecx, PROJXPOS
+		call vectorref, [@@data], ecx, ELEMXPOS
 		mov eax, edx
-		call vectorref, [@@data], ecx, PROJYPOS
+		call vectorref, [@@data], ecx, ELEMYPOS
 		call drawSprite, eax, edx, [@@sprite], offset screenBuffer
 		; after drawing the sprite, check direction and change x- and y-position accordingly for the next iteration
-		call vectorref, [@@data], ecx, PROJDIRECTION
+		call vectorref, [@@data], ecx, ELEMDIR
 		cmp edx, LEFT
 		je @@moveLeft
 		cmp edx, RIGHT
@@ -1423,10 +1477,10 @@ PROC moveObject
 	
 	; store the x-position of the element in eax
 	xor eax, eax
-	call vectorref, [@@array], [@@element], PROJXPOS
+	call vectorref, [@@array], [@@element], ELEMXPOS
 	mov eax, edx
 	; get the y-position which is stored in edx
-	call vectorref, [@@array], [@@element], PROJYPOS
+	call vectorref, [@@array], [@@element], ELEMYPOS
 	
 	cmp [@@direction], LEFT
 	je @@moveLeft
@@ -1439,22 +1493,22 @@ PROC moveObject
 	
 	@@moveLeft:
 		sub ax, PROJSPEED
-		call vectorset, [@@array], [@@element], PROJXPOS, ax
+		call vectorset, [@@array], [@@element], ELEMXPOS, ax
 		jmp @@return
 		
 	@@moveRight:
 		add ax, PROJSPEED
-		call vectorset, [@@array], [@@element], PROJXPOS, ax
+		call vectorset, [@@array], [@@element], ELEMXPOS, ax
 		jmp @@return
 		
 	@@moveUp:
 		sub dx, PROJSPEED
-		call vectorset, [@@array], [@@element], PROJYPOS, dx
+		call vectorset, [@@array], [@@element], ELEMYPOS, dx
 		jmp @@return
 		
 	@@moveDown:
 		add dx, PROJSPEED
-		call vectorset, [@@array], [@@element], PROJYPOS, dx
+		call vectorset, [@@array], [@@element], ELEMYPOS, dx
 		jmp @@return
 	
 	@@return:
@@ -1497,29 +1551,20 @@ PROC main
 		call	fillBackground, 0
 		call	drawBackground
 	
-		; Draw Enemy
-		; call	getGamedataElement, ENEMY1XPOS
-		; mov eax, edx
-		; call	getGamedataElement, ENEMY1YPOS
-	
-	
-		;call	drawSprite, 50, 100, offset stone, offset screenBuffer
 		call	drawRoom, offset rooms
 	
 		call	handleSprites, offset projectiles, offset stone
-	
+		call	handleSprites, offset enemies, offset character
+		
 		; Handle everything concerning the player
 		call handlePlayer
 		
-		; call	followChar, eax, edx
-	
 		call updateVideoBuffer, offset screenBuffer
-		
 		; test collision for every projectile
 		call testProjectileCollision
 		
 		; test if we died and have to return to the menu
-		mov al, [offset gamestarted]
+		mov al, [offset gamestarted] ; upon dying, gamestarted is set to 0
 		cmp al, FALSE
 		je @@returntomenu
 		
@@ -1581,28 +1626,26 @@ DATASEG
 	playerlen		dw	5
 					;	x-pos, y-pos, lives		direction	shooting?
 	playerdata		dw	 150, 	120, 	6,		1,			0
-	
-	gamelen			dd	6	; length of gamedata array
-	gamedata		dd	150 ; character x-position
-					dd	170 ; character y-position
-					dd 	3	; number of lives	
-					dd	100
-					dd	80
-					dd  0   ; number of projectiles alive
 					
-	projectiles		dw 	10, 5	; amount of projectiles, amount of information per projectile
+	projectiles		dw 	10, 6	; amount of projectiles, amount of information per projectile
 							
-							; alive, x-pos, y-pos,	direction,	collision?
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
-					dw		0,		0,		0,		0,			0
+							; alive, x-pos, y-pos,	direction,	collision?	lives
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+	
+	enemies			dw	2,	6	; amount of enemies, amount of information per enemy
+	
+							; alive, x-pos, y-pos,	direction,	collision?	lives
+					dw		1,		50,		80,		0,			1,			3
+					dw		1,		220,	150,	0,			1,			3
 					
 					
 	menu		dw 32, 25
