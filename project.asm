@@ -208,7 +208,7 @@ PROC setPlayerData
 		loop @@getToIndex	; loop until the correct index is reached
 	
 	xor ecx, ecx
-	xchg cx, [@@newvalue]
+	mov cx, [@@newvalue]
 	mov [ebx], cx
 	ret
 ENDP setPlayerData
@@ -281,7 +281,7 @@ PROC vectorset
 		loop @@getToInformation	; loop until the correct information is reached
 	
 	xor ecx, ecx
-	xchg cx, [@@newvalue]
+	mov cx, [@@newvalue]
 	mov [ebx], cx
 	ret
 ENDP vectorset
