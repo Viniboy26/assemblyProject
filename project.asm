@@ -5,6 +5,7 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
 INCLUDE "keyb.inc"
 INCLUDE "sprites.inc"
+INCLUDE "player.inc"
 
 ; compile-time constants (with macros)
 VMEMADR		EQU 0A002FH	; video memory address
@@ -157,17 +158,18 @@ PROC handlePlayer
 	xor ecx, ecx
 	xor edx, edx
 	
-	mov ebx, offset playerdata	; pointer to player data
-	mov ax, [ebx]				; assign x-position to ax
+	call getPlayerData, CHARLIVES
+	mov ecx, edx	; assign lives to ecx
 	
-	add ebx, 2					; go to next element
-	mov dx, [ebx]				; assign y-position to dx
+	call getPlayerData, CHARXPOS
+	mov eax, edx	; assign x-position to eax
+	
+	call getPlayerData, CHARYPOS	; assign y-position to edx
 	
 	; Draw the character
 	call	drawSprite, eax, edx, offset character, offset screenBuffer
 	
-	add ebx, 2					; go to next element
-	mov cx, [ebx]				; assign lives to cx
+	; compare lives to 0
 	cmp cx, 0
 	jg @@stillAlive									; if lives > 0, the player is still alive, gamestarted does not need to be set to 0
 	call selectOption, offset gamestarted, FALSE	; if lives = 0, set gamestarted to 0 which will return us to the menu
@@ -180,48 +182,48 @@ PROC handlePlayer
 		ret	
 ENDP handlePlayer
 
-PROC getPlayerData
-	ARG		@@index:dword	RETURNS	edx
-	USES	ebx, ecx
+; PROC getPlayerData
+	; ARG		@@index:dword	RETURNS	edx
+	; USES	ebx, ecx
 	
-	mov ebx, offset playerlen
-	mov ecx, [@@index]
+	; mov ebx, offset playerlen
+	; mov ecx, [@@index]
 	
-	@@getToIndex:
-		add ebx, 2			; go to next element
-		loop @@getToIndex	; loop until the correct index is reached
+	; @@getToIndex:
+		; add ebx, 2			; go to next element
+		; loop @@getToIndex	; loop until the correct index is reached
 	
-	xor edx, edx
-	mov dx, [ebx]
-	ret
-ENDP getPlayerData
+	; xor edx, edx
+	; mov dx, [ebx]
+	; ret
+; ENDP getPlayerData
 
-PROC setPlayerData
-	ARG		@@index:dword, @@newvalue:word
-	USES	ebx, ecx
+; PROC setPlayerData
+	; ARG		@@index:dword, @@newvalue:word
+	; USES	ebx, ecx
 	
-	mov ebx, offset playerlen
-	mov ecx, [@@index]
+	; mov ebx, offset playerlen
+	; mov ecx, [@@index]
 	
-	@@getToIndex:
-		add ebx, 2			; go to next element
-		loop @@getToIndex	; loop until the correct index is reached
+	; @@getToIndex:
+		; add ebx, 2			; go to next element
+		; loop @@getToIndex	; loop until the correct index is reached
 	
-	xor ecx, ecx
-	mov cx, [@@newvalue]
-	mov [ebx], cx
-	ret
-ENDP setPlayerData
+	; xor ecx, ecx
+	; mov cx, [@@newvalue]
+	; mov [ebx], cx
+	; ret
+; ENDP setPlayerData
 
 ; Decrease player's health by 1
-PROC decreaseHealth
-	USES edx
+; PROC decreaseHealth
+	; USES edx
 	
-	call getPlayerData, CHARLIVES
-	dec edx
-	call setPlayerData, CHARLIVES, edx
-	ret
-ENDP decreaseHealth
+	; call getPlayerData, CHARLIVES
+	; dec edx
+	; call setPlayerData, CHARLIVES, edx
+	; ret
+; ENDP decreaseHealth
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1623,9 +1625,9 @@ DATASEG
 					db 2Ah, 00H, 2Ch, 2Dh, 2Eh, 2Fh, 30h, 31h, 32h, 33h, 34h, 35h, 36h,  			 48h, 		4Fh, 50h, 51h,  1Ch
 					db 1Dh, 0h, 38h,  				39h,  				0h, 0h, 0h, 1Dh,  		4Bh, 50h, 4Dh,  52h, 53h
 					
-	playerlen		dw	5
+	; playerlen		dw	5
 					;	x-pos, y-pos, lives		direction	shooting?
-	playerdata		dw	 150, 	120, 	6,		1,			0
+	; playerdata		dw	 150, 	120, 	6,		1,			0
 					
 	projectiles		dw 	10, 6	; amount of projectiles, amount of information per projectile
 							
