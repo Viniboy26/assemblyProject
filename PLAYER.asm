@@ -7,6 +7,10 @@ INCLUDE "player.inc"
 
 ;; MACROS
 
+; Booleans
+TRUE		EQU	1
+FALSE		EQU 0
+
 ; Base values of player
 BASEXPOS	EQU	150
 BASEYPOS	EQU 120
@@ -26,11 +30,19 @@ CHARSHOOT	EQU	5	; boolean, test if charater is shooting
 NEXTELEMENT	EQU 12	; get to next element of a vector
 NEXTINFO	EQU 2	; get to next piece of information of an element
 
+; Indexes of gamedata information in "projectiles" and "enemies" array
+ELEMALIVE		EQU	1
+ELEMXPOS		EQU	2
+ELEMYPOS		EQU 3
+ELEMDIR			EQU	4
+ELEMCOLLISION	EQU	5
+ELEMLIVES		EQU	6
+
 
 ; -------------------------------------------------------------------
 CODESEG
 
-;;;; 32-bit Keyboard Functionality (code uit gegeven KEYB.ASM file)
+;;;; 32-bit Keyboard Functionality (code from given KEYB.ASM file)
 
 ; Installs the custom keyboard handler
 PROC __keyb_installKeyboardHandler
@@ -282,17 +294,201 @@ ENDP vectorset
 
 ;;;;--------------------------------------------------------
 
-DATASEG
-	playerlen		dw	5
-					;	x-pos, y-pos, lives		direction	shooting?
-	playerdata		dw	 150, 	120, 	6,		1,			0
+;; Projectile management
+
+; Shoots a projectile
+PROC shootProjectile
+	USES	eax, ebx, ecx, edx
 	
+	; test if the player is already shooting, if so, don't shoot again
+	call getPlayerData, CHARSHOOT
+	cmp dx, TRUE
+	je @@return
+	
+	mov ebx, offset projectiles
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of projectiles
+	
+	; find the first available projectile in projectiles array (i.e. alive = false)
+	@@findProjectile:
+		call vectorref, offset projectiles, ecx, ELEMALIVE
+		cmp edx, FALSE
+		je @@projectileFound	; if the projectile is "dead" it means it is available
+		loop @@findProjectile	; if not available, continue search
+		
+	jmp @@return	; if we didn't find any available projectile, return without doing anything
+		
+	@@projectileFound:
+	; get current player's position and direction to give it to the projectile
+	xor eax, eax
+	call getPlayerData, CHARXPOS ; stores the player's x-position in dx
+	mov ax, dx
+	xor ebx, ebx
+	call getPlayerData, CHARYPOS ; stores the player's y-position in dx
+	mov bx, dx
+	call getPlayerData, CHARDIR	; stores the player's direction in dx
+	; change the values of the projectile
+	call vectorset, offset projectiles, ecx, ELEMALIVE, TRUE
+	call vectorset, offset projectiles, ecx, ELEMXPOS, eax
+	call vectorset, offset projectiles, ecx, ELEMYPOS, ebx
+	call vectorset, offset projectiles, ecx, ELEMDIR, edx
+	
+	@@return:
+		ret
+ENDP shootProjectile
+
+; Deletes a projectile
+PROC deleteProjectile
+	ARG		@@projectile:dword
+	call vectorset, offset projectiles, [@@projectile], ELEMALIVE, FALSE
+	ret
+ENDP deleteProjectile
+
+; Delete all projectiles
+PROC deleteAllProjectiles
+	USES	ebx, ecx, edx
+	
+	mov ebx, offset projectiles
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of projectiles
+	
+	; find every living projectile and delete them
+	@@findProjectile:
+		call vectorref, offset projectiles, ecx, ELEMALIVE
+		cmp edx, FALSE
+		je @@next	; projectile is already dead
+		call deleteProjectile, ecx
+		@@next:
+		loop @@findProjectile
+		
+	@@return:
+		ret
+ENDP deleteAllProjectiles
+
+;;;;--------------------------------------------------------
+
+;; Enemy management
+
+; Kill an enemy
+PROC killEnemy
+	ARG		@@enemy:dword
+	call vectorset, offset enemies, [@@enemy], ELEMALIVE, FALSE
+	ret
+ENDP killEnemy
+
+; Delete all enemies
+PROC deleteAllEnemies
+	USES	ebx, ecx, edx
+	
+	mov ebx, offset enemies
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of enemies
+	
+	@@killenemies:
+		call killEnemy, ecx
+		loop @@killenemies
+		
+	@@return:
+		ret
+ENDP deleteAllEnemies
+
+PROC followChar
+	ARG 	@@enemy:dword, @@xpos: dword, @@ypos: dword
+	USES 	edx
+	
+	call vectorref, offset enemies, [@@enemy], ELEMXPOS
+	
+	cmp edx, [@@xpos]
+	jl @@increasexpos ; Increase it's position if it's lesser 
+	jg @@decreasexpos ; Decrease it's position if it's greater
+	
+	jmp @@ypostest
+	
+	@@increasexpos:
+		inc edx
+		call vectorset, [@@enemy], ELEMXPOS, edx
+		jmp @@ypostest
+	
+	@@decreasexpos:
+		dec edx
+		call vectorset, [@@enemy], ELEMXPOS, edx
+		jmp @@ypostest
+	
+	@@ypostest:
+		call vectorref, offset enemies, [@@enemy], ELEMYPOS
+		cmp edx, [@@ypos]
+		jl @@increaseypos
+		jg @@decreaseypos
+	
+		jmp @@return
+	
+	@@increaseypos:
+		inc edx
+		call vectorset, [@@enemy], ELEMYPOS, edx
+		jmp @@return
+	
+	@@decreaseypos:
+		dec edx
+		call vectorset, [@@enemy], ELEMYPOS, edx
+		jmp @@return
+	
+	@@return:
+		ret		
+ENDP followChar
+
+PROC enemiesFollow
+	USES	eax, ebx, ecx, edx
+	
+	mov ebx, offset enemies
+	xor ecx, ecx
+	mov cx, [ebx]
+	
+	@@loopEnemy:
+		xor eax, eax
+		call getPlayerData, CHARXPOS
+		mov ax, dx
+		call getPlayerData, CHARYPOS
+		call followChar, ecx, eax, edx
+		loop @@loopEnemy
+	ret
+ENDP enemiesFollow
+
+;;;;--------------------------------------------------------
+
+DATASEG
 	originalKeyboardHandlerS	dw ?			; SELECTOR of original keyboard handler
 	originalKeyboardHandlerO	dd ?			; OFFSET of original keyboard handler
 
 	__keyb_keyboardState		db 128 dup(?)	; state for all 128 keys
 	__keyb_rawScanCode			db ?			; scan code of last pressed key
 	__keyb_keysActive			db ?			; number of actively pressed keys
+	
+	playerlen		dw	5
+					;	x-pos, y-pos, lives		direction	shooting?
+	playerdata		dw	 150, 	120, 	6,		1,			0
+	
+	
+	;; vectors:
+	
+	projectiles		dw 	10, 6	; amount of projectiles, amount of information per projectile
+							
+							; alive, x-pos, y-pos,	direction,	collision?	lives
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					dw		0,		0,		0,		0,			1,			1
+					
+	enemies			dw	2,	6	; amount of enemies, amount of information per enemy
+	
+							; alive, x-pos, y-pos,	direction,	collision?	lives
+					dw		1,		50,		80,		0,			1,			3
+					dw		1,		220,	150,	0,			1,			3
 
 STACK
 

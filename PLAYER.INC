@@ -12,3 +12,14 @@ GLOBAL	getPlayerData:PROC, \
 		
 GLOBAL	vectorref:PROC, \
 		vectorset:PROC
+		
+GLOBAL	shootProjectile:PROC, \
+		deleteProjectile:PROC, \
+		deleteAllProjectiles:PROC, \
+		projectiles:WORD
+		
+GLOBAL	killEnemy:PROC, \
+		deleteAllEnemies:PROC, \
+		followChar:PROC, \
+		enemiesFollow:PROC, \
+		enemies:WORD
