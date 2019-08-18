@@ -209,11 +209,11 @@ ENDP decreaseHealth
 
 ; Reset Player
 PROC resetPlayer
-	call setPlayerData, CHARXPOS, BASEXPOS
-	call setPlayerData, CHARYPOS, BASEYPOS
-	call setPlayerData, CHARLIVES, BASELIVES
-	call setPlayerData, CHARDIR, BASEDIR
-	call setPlayerData, CHARSHOOT, BASESHOOT
+	call setPlayerData, CHARXPOS, 	BASEXPOS
+	call setPlayerData, CHARYPOS, 	BASEYPOS
+	call setPlayerData, CHARLIVES, 	BASELIVES
+	call setPlayerData, CHARDIR, 	BASEDIR
+	call setPlayerData, CHARSHOOT, 	BASESHOOT
 	ret
 ENDP resetPlayer
 
