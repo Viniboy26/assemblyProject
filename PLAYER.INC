@@ -26,4 +26,7 @@ GLOBAL	killEnemy:PROC, \
 		allEnemiesCD:PROC, \
 		enemies:WORD
 		
-GLOBAL	objects:WORD
+GLOBAL	deletePickup:PROC, \
+		getPickupRoom:PROC, \
+		getPickupEffect:PROC, \
+		pickups:WORD

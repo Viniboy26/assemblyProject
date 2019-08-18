@@ -82,6 +82,10 @@ NEXT	EQU	1
 RESUME 	EQU	1
 ; EXIT EQU 2 is already defined
 
+; Effects of pickups
+ARMOR		EQU	1
+DMGBOOST	EQU	2
+
 ;;;;---------------------------------------------------------------------------------------------------
 
 CODESEG
@@ -1241,6 +1245,8 @@ ENDP terminateProcess
 
 ;;;;---------------------------------------------------------------------------------------------------
 
+;; Drawing management
+
 
 PROC drawBackground
 	USES 	eax, ebx, ecx, edx, edi
@@ -1260,6 +1266,35 @@ PROC drawBackground
 		
 	ret
 ENDP drawBackground
+
+PROC handlePickups
+	USES	eax, ebx, ecx, edx
+	
+	mov ebx, offset pickups
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of pickups
+	
+	; find the pickups that are in the room we are in and draw them as long as they were not picked up yet
+	@@findPickup:
+		call getPickupRoom, ecx	; the room in which the pickup is
+		cmp edx, [offset currentRoom]
+		jne @@next	; if the pickup is in another room, don't draw it
+		call vectorref, offset pickups, ecx, ELEMXPOS
+		mov eax, edx	; store x-position of pickup in eax
+		call vectorref, offset pickups, ecx, ELEMYPOS
+		mov ebx, edx	; store y-position of pickup in ebx
+		call getPickupEffect ; store effect of pickup in edx
+		cmp edx, ARMOR
+		je	@@drawArmor
+		call drawSprite, eax, ebx, damageBoost, offset screenBuffer
+		@@drawArmor:
+			call drawSprite, eax, ebx, armor, offset screenBuffer
+		@@next:
+			loop @@findPickup
+		
+	@@return:
+		ret
+ENDP handlePickups
 
 PROC drawNSprites
 	ARG		@@xpos:word, @@ypos:word, @@nSprites:word, @@gap:word, @@sprite:dword
@@ -1450,6 +1485,9 @@ PROC main
 		
 		; Handle everything concerning the player
 		call handlePlayer
+		
+		; Handle everything concerning the pickups
+		; call handlePickups
 		
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy

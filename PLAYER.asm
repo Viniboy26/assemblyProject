@@ -50,10 +50,10 @@ ELEMCOLLISION	EQU	5
 ELEMLIVES		EQU	6
 
 ; Indexes of gamedata information in "objects" vector
-OBJEFFECT	EQU	5	; effect that the object has upon picking it up
-OBJROOM		EQU	6	; room that the object is in
+PICKUPEFFECT	EQU	5	; effect that the object has upon picking it up
+PICKUPROOM		EQU	6	; room that the object is in
 
-; Effects
+; Effects of pickups
 ARMOR		EQU	1
 DMGBOOST	EQU	2
 
@@ -312,6 +312,12 @@ PROC vectorset
 	ret
 ENDP vectorset
 
+PROC deleteElement
+	ARG		@@vector:dword,	@@element:dword
+	call vectorset, [@@vector], [@@element], ELEMALIVE, FALSE
+	ret
+ENDP deleteElement
+
 ;;;;--------------------------------------------------------
 
 ;; Projectile management
@@ -360,7 +366,7 @@ ENDP shootProjectile
 ; Deletes a projectile
 PROC deleteProjectile
 	ARG		@@projectile:dword
-	call vectorset, offset projectiles, [@@projectile], ELEMALIVE, FALSE
+	call deleteElement, offset projectiles, [@@projectile]
 	ret
 ENDP deleteProjectile
 
@@ -405,7 +411,7 @@ ENDP decreaseEnemyHealth
 ; Kill an enemy
 PROC killEnemy
 	ARG		@@enemy:dword
-	call vectorset, offset enemies, [@@enemy], ELEMALIVE, FALSE
+	call deleteElement, offset enemies, [@@enemy]
 	ret
 ENDP killEnemy
 
@@ -538,6 +544,28 @@ ENDP allEnemiesCD
 
 ;;;;--------------------------------------------------------
 
+;; Pickup management
+
+PROC deletePickup
+	ARG		@@pickup:dword
+	call deleteElement, offset pickups, [@@pickup]
+	ret
+ENDP deletePickup
+
+PROC getPickupRoom
+	ARG		@@pickup:dword	RETURNS edx
+	call vectorref, offset pickups, [@@pickup], PICKUPROOM
+	ret
+ENDP getPickupRoom
+
+PROC getPickupEffect
+	ARG		@@pickup:dword	RETURNS edx
+	call vectorref, offset pickups, [@@pickup], PICKUPEFFECT
+	ret
+ENDP getPickupEffect
+
+;;;;--------------------------------------------------------
+
 DATASEG
 	originalKeyboardHandlerS	dw ?			; SELECTOR of original keyboard handler
 	originalKeyboardHandlerO	dd ?			; OFFSET of original keyboard handler
@@ -573,10 +601,10 @@ DATASEG
 					dw		1,		50,		80,		0,			1,			60
 					dw		1,		220,	150,	0,			1,			60
 					
-	objects			dw	11,	6	; amount of objects, amount of information per object
+	pickups			dw	11,	6	; amount of pickups, amount of information per pickup
 	
 							; alive, x-pos, y-pos,	direction,	effect,		room
-					dw		1,		0,		0,		0,			2,			2
+					dw		1,		150,		120,		0,			2,			2
 					dw		1,		0,		0,		0,			2,			4
 					dw		1,		0,		0,		0,			1,			4
 					dw		1,		0,		0,		0,			1,			6

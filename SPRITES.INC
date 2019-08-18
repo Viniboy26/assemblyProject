@@ -9,6 +9,8 @@ GLOBAL	background:WORD, \
 		horizontalWall:WORD, \
 		horizontalWall2:WORD, \
 		floor:WORD, \
+		armor:WORD, \
+		damageBoost:WORD, \
 		rooms:BYTE, \
 		_start:WORD, \
 		_exit:WORD, \
