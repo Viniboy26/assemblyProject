@@ -75,6 +75,10 @@ KEYCNT EQU 89
 START	EQU 1
 EXIT	EQU 2
 
+; Next or Prior option
+PRIOR	EQU 0
+NEXT	EQU	1
+
 ; Pause options
 RESUME 	EQU	1
 ; EXIT EQU 2 is already defined
@@ -1109,14 +1113,14 @@ PROC keyboardDuringMenu
 		mov bl, [offset menuoption]
 		cmp bl, START	; test to see if we remain in amount of options boundary
 		je @@return		; if our current option is the first one we can't go to the prior option
-		call selectOption, offset menuoption, 0
+		call selectOption, offset menuoption, PRIOR
 		jmp @@return
 	
 	@@nextOption:
 		mov bl, [offset menuoption]
 		cmp bl, EXIT	; test to see if we remain in amount of options boundary
 		je @@return		; if our current option is the last one we can't go to the next option
-		call selectOption, offset menuoption, 1
+		call selectOption, offset menuoption, NEXT
 		jmp @@return
 	
 	@@return:
@@ -1132,7 +1136,7 @@ PROC selectOption
 	mov ebx, [@@darray]	; pointer to option
 	mov cl, [ebx]		; option
 	
-	cmp [@@option], 0
+	cmp [@@option], PRIOR
 	jg @@nextOption
 	jmp @@priorOption
 	
@@ -1470,20 +1474,6 @@ PROC main
 	
 		@@leavemenu:
 			jmp @@gameloop ; jump to the game	
-		;; Draw the menu
-		; call drawSprite, 0, 0, offset menu, offset screenBuffer
-		; call updateVideoBuffer, offset screenBuffer
-		;; Call the keyboard
-		; call	keyboardDuringMenu
-		;; Test to see if the game has started
-		; mov al, [offset gamestarted]
-		; cmp al, START
-		; je @@leavemenu ; if the game started, leave the menu
-	
-		; jmp @@menuloop
-	
-		; @@leavemenu:
-			; jmp @@gameloop ; jump to the game
 	
 	@@gameloop:
 		call 	keyboardFunction
@@ -1521,8 +1511,8 @@ PROC main
 		call fillBackground, 0	; delete everything
 		call drawSprite, 0, 0, offset menu, offset screenBuffer
 		call updateVideoBuffer, offset screenBuffer	; draw menu
-		call setPlayerData, CHARLIVES, 6 ; set lives to 6 again for the next game
-		call selectOption, offset gamestarted, 0 ; set boolean equal to 0 again
+		call resetPlayer ; reset Player for next game
+		call selectOption, offset gamestarted, FALSE ; set boolean equal to 0 again
 		jmp @@menuloop	; jump back to the menu loop
 		
 	
@@ -1762,6 +1752,7 @@ DATASEG
 			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
 			DB 18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H,18H
 			
+			;	number, leftside, rightside, upside, downside, doors open?
 	rooms	DB 1, 0, 2, 0, 0, 0
 			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
@@ -1778,21 +1769,21 @@ DATASEG
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,3,3,2,1,2,1
 			
-			DB 3, 0, 0, 0, 6, 0
-			DB 1,2,1,2,1,2,1,2,1,2
+			DB 3, 0, 0, 10, 6, 0
+			DB 1,2,1,2,3,3,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,3,3,1,2,1,1
 
-			DB 4, 0, 5, 0, 7, 0
+			DB 4, 0, 5, 0, 0, 0
 			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,3
 			DB 2,3,3,3,3,3,3,3,3,3
 			DB 1,3,3,3,3,3,3,3,3,2
-			DB 2,1,2,1,3,3,1,2,1,1
+			DB 2,1,2,1,2,1,2,1,2,1
 
 			DB 5, 4, 6, 2, 0, 0
 			DB 1,2,1,2,3,3,1,2,1,2
@@ -1810,11 +1801,11 @@ DATASEG
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,3,3,1,2,1,1
 
-			DB 7, 0, 0, 4, 0, 0
-			DB 1,2,1,2,3,3,1,2,1,2
+			DB 7, 16, 0, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
-			DB 1,3,3,3,3,3,3,3,3,2
-			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,2,1,2,1,2,1
 
@@ -1831,6 +1822,62 @@ DATASEG
 			DB 2,3,3,3,3,3,3,3,3,1
 			DB 3,3,3,3,3,3,3,3,3,2
 			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 10, 11, 0, 0, 3, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+
+			DB 11, 12, 10, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 12, 13, 11, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 13, 0, 12, 0, 14, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+
+			DB 14, 0, 0, 13, 15, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1	
+			
+			DB 15, 0, 0, 14, 16, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+			
+			DB 16, 0, 7, 15, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,2,1,2,1,2,1
 			
