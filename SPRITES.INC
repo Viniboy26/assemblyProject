@@ -12,4 +12,6 @@ GLOBAL	background:WORD, \
 		rooms:BYTE, \
 		_start:WORD, \
 		_exit:WORD, \
-		menu:WORD
+		menu:WORD, \
+		back:WORD, \
+		armor:WORD
