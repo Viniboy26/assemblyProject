@@ -14,44 +14,16 @@ CHARLIVES	EQU 3 	; number of lives character has
 CHARDIR		EQU 4	; character's direction
 CHARSHOOT	EQU	5	; boolean, test if charater is shooting
 
+; Amount of bytes to skip in a vector to get to either the next element or the next piece of information of an element
+; vectors are arrays that are made out of an arbitrary number of elements each containing 6 pieces of information as Double Words
+NEXTELEMENT	EQU 12	; get to next element of a vector
+NEXTINFO	EQU 2	; get to next piece of information of an element
+
 
 ; -------------------------------------------------------------------
 CODESEG
 
-; PROC handlePlayer
-	; USES eax, ebx, ecx, edx
-	
-	;; Test if character remains in screen boundary
-	; call testBoarders, offset character
-	; call collisionWithRoom
-	
-	;; Set eax, ecx and edx equal to 0
-	; xor eax, eax
-	; xor ecx, ecx
-	; xor edx, edx
-	
-	; mov ebx, offset playerdata	; pointer to player data
-	; mov ax, [ebx]				; assign x-position to ax
-	
-	; add ebx, 2					; go to next element
-	; mov dx, [ebx]				; assign y-position to dx
-	
-	;; Draw the character
-	; call	drawSprite, eax, edx, offset character, offset screenBuffer
-	
-	; add ebx, 2					; go to next element
-	; mov cx, [ebx]				; assign lives to cx
-	; cmp cx, 0
-	; jg @@stillAlive									; if lives > 0, the player is still alive, gamestarted does not need to be set to 0
-	; call selectOption, offset gamestarted, FALSE	; if lives = 0, set gamestarted to 0 which will return us to the menu
-	; jmp @@return									; after setting gamestarted to 0 return out of the function
-	
-	; @@stillAlive:
-	; call 	drawNSprites, 2, 2, ecx, 2, offset heart ; draw remaining lives	
-	
-	; @@return:
-		; ret	
-; ENDP handlePlayer
+;;;; Player
 
 PROC getPlayerData
 	ARG		@@index:dword	RETURNS	edx
@@ -95,6 +67,69 @@ PROC decreaseHealth
 	call setPlayerData, CHARLIVES, edx
 	ret
 ENDP decreaseHealth
+
+;;;;--------------------------------------------------------
+
+;;;; Vectors
+
+; Get the information from an element from an array containing game data
+PROC vectorref
+	ARG		@@array:dword, @@element: dword, @@information:dword	RETURNS	edx
+	USES	ebx, ecx
+	
+	mov ebx, [@@array]
+	add ebx, NEXTINFO	; skip amount of elements and information per element
+	mov ecx, [@@element]
+	dec ecx
+	cmp ecx, 0
+	je @@elementzero
+	
+	@@getToElement:
+		add ebx, NEXTELEMENT 	; go to next element
+		loop @@getToElement 	; loop until the correct element is reached
+		
+	@@elementzero:
+	
+	mov ecx, [@@information]
+	
+	@@getToInformation:
+		add ebx, NEXTINFO		; get to next piece of information
+		loop @@getToInformation	; loop until the correct information is reached
+	
+	xor edx, edx
+	mov dx, [ebx]
+	ret	
+ENDP vectorref
+
+; Set a piece of information from an element from an array to a different value
+PROC vectorset
+	ARG		@@array:dword, @@element:dword, @@information:dword, @@newvalue:word
+	USES	ebx, ecx
+	
+	mov ebx, [@@array]
+	add ebx, NEXTINFO	; skip amount of elements and information per element
+	mov ecx, [@@element]
+	dec ecx
+	cmp ecx, 0
+	je @@elementzero
+	
+	@@getToElement:
+		add ebx, NEXTELEMENT 	; go to next element
+		loop @@getToElement 	; loop until the correct element is reached
+		
+	@@elementzero:
+	
+	mov ecx, [@@information]
+	
+	@@getToInformation:
+		add ebx, NEXTINFO		; get to next piece of information
+		loop @@getToInformation	; loop until the correct information is reached
+	
+	xor ecx, ecx
+	mov cx, [@@newvalue]
+	mov [ebx], cx
+	ret
+ENDP vectorset
 
 DATASEG
 	playerlen		dw	5
