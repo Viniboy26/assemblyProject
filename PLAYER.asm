@@ -24,6 +24,8 @@ CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
 CHARDIR		EQU 4	; character's direction
 CHARSHOOT	EQU	5	; boolean, test if charater is shooting
+CHARDMG		EQU	6	; character's damage towards enemies
+CHARARMOR	EQU	7	; character's
 
 ; Amount of bytes to skip in a vector to get to either the next element or the next piece of information of an element
 ; vectors are arrays that are made out of an arbitrary number of elements each containing 6 pieces of information as Double Words
@@ -369,6 +371,19 @@ ENDP deleteAllProjectiles
 
 ;; Enemy management
 
+; Decrease the health of an enemy
+PROC decreaseEnemyHealth
+	ARG		@@enemy:dword
+	USES	eax, edx
+	
+	call getPlayerData, CHARDMG
+	mov eax, edx
+	call vectorref, offset enemies, [@@enemy], ELEMALIVE
+	sub edx, eax
+	call vectorset, offset enemies, [@@enemy], ELEMALIVE, edx
+	ret
+ENDP decreaseEnemyHealth
+
 ; Kill an enemy
 PROC killEnemy
 	ARG		@@enemy:dword
@@ -464,8 +479,8 @@ DATASEG
 	__keyb_keysActive			db ?			; number of actively pressed keys
 	
 	playerlen		dw	5
-					;	x-pos, y-pos, lives		direction	shooting?
-	playerdata		dw	 150, 	120, 	6,		1,			0
+					;	x-pos, y-pos, lives		direction	shooting?	damage		armor
+	playerdata		dw	 150, 	120, 	6,		1,			0,			20,			0
 	
 	
 	;; vectors:
@@ -487,8 +502,8 @@ DATASEG
 	enemies			dw	2,	6	; amount of enemies, amount of information per enemy
 	
 							; alive, x-pos, y-pos,	direction,	collision?	lives
-					dw		1,		50,		80,		0,			1,			3
-					dw		1,		220,	150,	0,			1,			3
+					dw		1,		50,		80,		0,			1,			60
+					dw		1,		220,	150,	0,			1,			60
 
 STACK
 
