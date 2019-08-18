@@ -29,4 +29,6 @@ GLOBAL	killEnemy:PROC, \
 GLOBAL	deletePickup:PROC, \
 		getPickupRoom:PROC, \
 		getPickupEffect:PROC, \
+		dmgBoostPickedUp:PROC, \
+		armorPickedUp:PROC, \
 		pickups:WORD

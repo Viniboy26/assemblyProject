@@ -57,6 +57,10 @@ PICKUPROOM		EQU	6	; room that the object is in
 ARMOR		EQU	1
 DMGBOOST	EQU	2
 
+; Upon collecting a pickup
+EXTRADMG	EQU	8
+
+
 ; -------------------------------------------------------------------
 CODESEG
 
@@ -564,6 +568,29 @@ PROC getPickupEffect
 	ret
 ENDP getPickupEffect
 
+PROC dmgBoostPickedUp
+	ARG		@@pickup:dword
+	USES	edx
+	
+	call deletePickup, [@@pickup]
+	call decreaseHealth
+	call getPlayerData, CHARDMG
+	add edx, EXTRADMG
+	call setPlayerData, CHARDMG, edx
+	ret
+ENDP dmgBoostPickedUp
+
+PROC armorPickedUp
+	ARG		@@pickup
+	USES	edx
+	
+	call deletePickup, [@@pickup]
+	call getPlayerData, CHARARMOR
+	inc edx
+	call setPlayerData, CHARARMOR, edx
+	ret
+ENDP armorPickedUp
+
 ;;;;--------------------------------------------------------
 
 DATASEG
@@ -598,8 +625,8 @@ DATASEG
 	enemies			dw	2,	6	; amount of enemies, amount of information per enemy
 	
 							; alive, x-pos, y-pos,	direction,	collision?	lives
-					dw		1,		50,		80,		0,			1,			60
-					dw		1,		220,	150,	0,			1,			60
+					dw		1,		50,		80,		0,			1,			80
+					dw		1,		220,	150,	0,			1,			80
 					
 	pickups			dw	11,	6	; amount of pickups, amount of information per pickup
 	

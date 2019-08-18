@@ -1495,13 +1495,12 @@ PROC main
 	
 		call	handleSprites, offset projectiles, offset stone
 		call	handleSprites, offset enemies, offset character
-		; call	handleSprites, offset pickups, offset damageBoost
+		
+		; Handle everything concerning the pickups
+		call	handlePickups
 		
 		; Handle everything concerning the player
 		call handlePlayer
-		
-		; Handle everything concerning the pickups
-		call handlePickups
 		
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
