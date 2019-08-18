@@ -26,7 +26,7 @@ ENDP updateVideoBuffer
 
 PROC drawSprite
 	ARG		@@xpos:word, @@ypos:word, @@sprite:dword, @@buffer:dword
-	USES 	eax,ebx,ecx,edx,edi,esi,ebp
+	USES 	eax,ebx,ecx,edx,edi,esi
 	
 	; Get the top left corner of the sprite's index
 	movzx eax, [@@ypos]
@@ -47,7 +47,6 @@ PROC drawSprite
 	add ebx, 4				; go to the actual list (not the first 2 arguments)
 		
 	mov esi, eax ; we store the width of the sprite for later uses
-	mov ebp, ecx ; we store the height of the sprite for later uses
 	
 	push eax				; save eax to multiply
 	push edx				; save edx to multiply
