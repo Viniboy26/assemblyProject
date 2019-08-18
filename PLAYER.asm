@@ -601,7 +601,7 @@ DATASEG
 	__keyb_rawScanCode			db ?			; scan code of last pressed key
 	__keyb_keysActive			db ?			; number of actively pressed keys
 	
-	playerlen		dw	5
+	playerlen		dw	7
 					;		x-pos, 		y-pos, 		lives		direction	shooting?	damage		armor
 	playerdata		dw	 	BASEXPOS, 	BASEYPOS,	BASELIVES,	BASEDIR,	BASESHOOT,	BASEDMG,	BASEARMOR
 	
@@ -642,6 +642,11 @@ DATASEG
 					dw		1,		0,		0,		0,			2,			13
 					dw		1,		0,		0,		0,			1,			14
 					dw		1,		0,		0,		0,			1,			16
+					
+	finalboss		dw	1, 6
+	
+							
+					dw		1	
 
 					
 					
