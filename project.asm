@@ -1535,7 +1535,7 @@ ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
-	currentRoom		dw 1	; room the player is in
+	currentRoom		dw 1	; room the player starts in
 	
 	gamestarted		db 0	; boolean to test if game has started
 	

@@ -7,6 +7,13 @@ INCLUDE "player.inc"
 
 ;; MACROS
 
+; Base values of player
+BASEXPOS	EQU	150
+BASEYPOS	EQU 120
+BASELIVES	EQU	6
+BASEDIR		EQU	1
+BASESHOOT	EQU	0
+
 ; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
 CHARYPOS	EQU 2	; character begin y-position
@@ -67,6 +74,16 @@ PROC decreaseHealth
 	call setPlayerData, CHARLIVES, edx
 	ret
 ENDP decreaseHealth
+
+; Reset Player
+PROC resetPlayer
+	call setPlayerData, CHARXPOS, BASEXPOS
+	call setPlayerData, CHARYPOS, BASEYPOS
+	call setPlayerData, CHARLIVES, BASELIVES
+	call setPlayerData, CHARDIR, BASEDIR
+	call setPlayerData, CHARSHOOT, BASESHOOT
+	ret
+ENDP resetPlayer
 
 ;;;;--------------------------------------------------------
 
