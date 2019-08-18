@@ -963,8 +963,8 @@ PROC keyboardDuringPause
 		jmp @@return
 	
 	@@exit:
-		call __keyb_uninstallKeyboardHandler
-		call terminateProcess
+		call returnToMenu
+		jmp @@return
 	
 	;;-----------------------------------------------
 	
@@ -988,6 +988,18 @@ PROC keyboardDuringPause
 		ret
 ENDP keyboardDuringPause
 
+PROC returnToMenu
+	call fillBackground, 12H
+	call drawSprite, 140, 80, offset _start, offset screenBuffer
+	call drawSprite, 140, 105, offset _exit, offset screenBuffer
+	call updateVideoBuffer, offset screenBuffer
+	call resetPlayer
+	call selectOption, offset gamepaused, FALSE
+	call selectOption, offset gamestarted, FALSE
+	call wait_VBLANK, 3
+	ret
+ENDP returnToMenu
+
 PROC resumeGame
 	call selectOption, offset gamepaused, FALSE
 	ret
@@ -997,6 +1009,7 @@ PROC pauseGame
 	call selectOption, offset gamepaused, TRUE
 	ret
 ENDP pauseGame
+
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1460,17 +1473,35 @@ PROC main
 		
 		
 	@@returntomenu:
-		call fillBackground, 0	; delete everything
-		call drawSprite, 0, 0, offset menu, offset screenBuffer
-		call updateVideoBuffer, offset screenBuffer	; draw menu
-		call resetPlayer ; reset Player for next game
-		call selectOption, offset gamestarted, FALSE ; set boolean equal to 0 again
-		jmp @@menuloop	; jump back to the menu loop
+		call returnToMenu 							; return to menu
+		jmp @@menuloop								; jump back to the menu loop
 		
 	
 	@@pausegame:
-		call fillBackground, 0	; delete everything
-		call drawSprite, 0, 0, offset menu, offset screenBuffer
+		call fillBackground, 12H	; delete everything
+		push eax
+		xor eax,eax
+		mov al, [offset pauseoption]
+		cmp al, 1
+		je @@drawBackRectangle
+		
+		cmp al, 2
+		je @@drawMenuRectangle
+		
+		@@drawBackRectangle:
+			call drawRectangle, 138, 78, 35, 21, 07H
+			jmp @@drawPauseSprites
+		
+		@@drawMenuRectangle:
+			call drawRectangle, 138, 103, 35, 21, 07H
+			
+		jmp @@drawPauseSprites
+		
+		
+		@@drawPauseSprites:
+		pop eax
+		call drawSprite, 140, 80, offset _back, offset screenBuffer
+		call drawSprite, 140, 105, offset menu, offset screenBuffer
 		call updateVideoBuffer, offset screenBuffer	; draw pause menu
 		call keyboardDuringPause
 		mov al, [offset gamepaused]
