@@ -3,8 +3,8 @@
 # =============================================================================
 
 # Settings - Edit the names of the object and executable files.
-objects1 = skyrim.obj graphics.obj sprites.obj
-dest = skyrim.exe
+objects1 = project.obj sprites.obj player.obj
+dest = project.exe
 
 # =============================================================================
 # Do NOT edit this section, unless you know what you are doing.

@@ -82,10 +82,6 @@ NEXT	EQU	1
 RESUME 	EQU	1
 ; EXIT EQU 2 is already defined
 
-; Effects of pickups
-ARMOR		EQU	1
-DMGBOOST	EQU	2
-
 ;;;;---------------------------------------------------------------------------------------------------
 
 CODESEG
@@ -149,7 +145,7 @@ PROC drawRectangle
 		mov	al,[@@col]
 		rep stosb
 		add edi, SCRWIDTH	; set edi to the next line
-		sub edi, edx		; substract the width so edi is on the left	
+		sub edi, edx		; subtract the width so edi is on the left	
 		pop ecx
 		loop @@horloop	
 		
@@ -468,28 +464,6 @@ PROC testEnemyCollision
 		ret
 ENDP testEnemyCollision
 
-PROC enemiesMove
-	USES	ebx, ecx, edx
-	
-	mov ebx, offset enemies
-	xor ecx, ecx
-	mov cx, [ebx]	; amount of enemies
-	
-	; find every living enemy and make them move
-	@@findEnemy:
-		call vectorref, offset enemies, ecx, ELEMALIVE
-		cmp edx, FALSE
-		je @@next	; if the enemy is dead, he does not move
-		xor edx, edx
-		call vectorref, offset enemies, ecx, ELEMDIR
-		call moveObject, offset enemies, ecx, edx
-		@@next:
-		loop @@findEnemy
-		
-	@@return:
-		ret
-ENDP enemiesMove
-
 ;;;;---------------------------------------------------------------------------------------------------
 
 ;; Movement methods
@@ -632,6 +606,8 @@ PROC testBoarders
 ENDP testBoarders
 
 ;;;;---------------------------------------------------------------------------------------------------
+
+
 
 ;-------------------------------------------------------------------------------------------------
 
@@ -918,7 +894,6 @@ ENDP collisionWithRoom
 
 ;; Pause management
 
-; Determines what to do when a certain key is pressed while the game is paused
 PROC keyboardDuringPause
 	USES ebx, ecx
 	
@@ -997,7 +972,7 @@ PROC returnToMenu
 	call drawSprite, 140, 80, offset _start, offset screenBuffer
 	call drawSprite, 140, 105, offset _exit, offset screenBuffer
 	call updateVideoBuffer, offset screenBuffer
-	call resetPlayer
+	call setPlayerData, CHARLIVES, 6 			; set lives to 3 again for the next game
 	call selectOption, offset gamepaused, FALSE
 	call selectOption, offset gamestarted, FALSE
 	call wait_VBLANK, 3
@@ -1013,7 +988,6 @@ PROC pauseGame
 	call selectOption, offset gamepaused, TRUE
 	ret
 ENDP pauseGame
-
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1245,8 +1219,6 @@ ENDP terminateProcess
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-;; Drawing management
-
 
 PROC drawBackground
 	USES 	eax, ebx, ecx, edx, edi
@@ -1266,35 +1238,6 @@ PROC drawBackground
 		
 	ret
 ENDP drawBackground
-
-PROC handlePickups
-	USES	eax, ebx, ecx, edx
-	
-	mov ebx, offset pickups
-	xor ecx, ecx
-	mov cx, [ebx]	; amount of pickups
-	
-	; find the pickups that are in the room we are in and draw them as long as they were not picked up yet
-	@@findPickup:
-		call getPickupRoom, ecx	; the room in which the pickup is
-		cmp edx, [offset currentRoom]
-		jne @@next	; if the pickup is in another room, don't draw it
-		call vectorref, offset pickups, ecx, ELEMXPOS
-		mov eax, edx	; store x-position of pickup in eax
-		call vectorref, offset pickups, ecx, ELEMYPOS
-		mov ebx, edx	; store y-position of pickup in ebx
-		call getPickupEffect ; store effect of pickup in edx
-		cmp edx, ARMOR
-		je	@@drawArmor
-		call drawSprite, eax, ebx, damageBoost, offset screenBuffer
-		@@drawArmor:
-			call drawSprite, eax, ebx, armor, offset screenBuffer
-		@@next:
-			loop @@findPickup
-		
-	@@return:
-		ret
-ENDP handlePickups
 
 PROC drawNSprites
 	ARG		@@xpos:word, @@ypos:word, @@nSprites:word, @@gap:word, @@sprite:dword
@@ -1386,8 +1329,6 @@ PROC moveObject
 	; get the y-position which is stored in edx
 	call vectorref, [@@array], [@@element], ELEMYPOS
 	
-	cmp [@@direction], STILL
-	je @@return
 	cmp [@@direction], LEFT
 	je @@moveLeft
 	cmp [@@direction], RIGHT
@@ -1454,8 +1395,6 @@ PROC main
 		
 		@@drawExitRectangle:
 			call drawRectangle, 138, 103, 35, 21, 07H
-			
-		jmp @@drawSprites
 		
 		@@drawSprites:
 		pop eax
@@ -1483,16 +1422,16 @@ PROC main
 		call	handleSprites, offset projectiles, offset stone
 		call	handleSprites, offset enemies, offset character
 		
+		call drawSprite, 140, 80, offset damageBoost, offset screenBuffer
+		
 		; Handle everything concerning the player
 		call handlePlayer
 		
-		; Handle everything concerning the pickups
-		; call handlePickups
+		; call enemiesFollow
 		
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
 		call testProjectileCollision
-		;call enemiesMove
 		
 		; test if we died and have to return to the menu
 		mov al, [offset gamestarted] ; upon dying, gamestarted is set to 0
@@ -1538,7 +1477,7 @@ PROC main
 		
 		@@drawPauseSprites:
 		pop eax
-		call drawSprite, 140, 80, offset _back, offset screenBuffer
+		call drawSprite, 140, 80, offset back, offset screenBuffer
 		call drawSprite, 140, 105, offset menu, offset screenBuffer
 		call updateVideoBuffer, offset screenBuffer	; draw pause menu
 		call keyboardDuringPause
