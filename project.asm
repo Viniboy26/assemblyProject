@@ -5,7 +5,7 @@ ASSUME cs:_TEXT,ds:FLAT,es:FLAT,fs:FLAT,gs:FLAT
 
 ;;;; Includes
 
-INCLUDE "keyb.inc"
+;INCLUDE "keyb.inc"
 INCLUDE "sprites.inc"
 INCLUDE "player.inc"
 
