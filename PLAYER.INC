@@ -22,4 +22,8 @@ GLOBAL	killEnemy:PROC, \
 		deleteAllEnemies:PROC, \
 		followChar:PROC, \
 		enemiesFollow:PROC, \
+		enemyChangeDirection:PROC, \
+		allEnemiesCD:PROC, \
 		enemies:WORD
+		
+GLOBAL	objects:WORD

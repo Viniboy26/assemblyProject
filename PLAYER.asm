@@ -11,12 +11,21 @@ INCLUDE "player.inc"
 TRUE		EQU	1
 FALSE		EQU 0
 
+; Directions
+STILL		EQU	0
+LEFT		EQU 1
+RIGHT		EQU 2
+UP			EQU 3
+DOWN		EQU 4
+
 ; Base values of player
 BASEXPOS	EQU	150
 BASEYPOS	EQU 120
 BASELIVES	EQU	6
 BASEDIR		EQU	1
 BASESHOOT	EQU	0
+BASEDMG		EQU	20
+BASEARMOR	EQU	0
 
 ; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
@@ -32,7 +41,7 @@ CHARARMOR	EQU	7	; character's
 NEXTELEMENT	EQU 12	; get to next element of a vector
 NEXTINFO	EQU 2	; get to next piece of information of an element
 
-; Indexes of gamedata information in "projectiles" and "enemies" array
+; Indexes of gamedata information in "projectiles" and "enemies" vector
 ELEMALIVE		EQU	1
 ELEMXPOS		EQU	2
 ELEMYPOS		EQU 3
@@ -40,6 +49,13 @@ ELEMDIR			EQU	4
 ELEMCOLLISION	EQU	5
 ELEMLIVES		EQU	6
 
+; Indexes of gamedata information in "objects" vector
+OBJEFFECT	EQU	5	; effect that the object has upon picking it up
+OBJROOM		EQU	6	; room that the object is in
+
+; Effects
+ARMOR		EQU	1
+DMGBOOST	EQU	2
 
 ; -------------------------------------------------------------------
 CODESEG
@@ -228,6 +244,8 @@ PROC resetPlayer
 	call setPlayerData, CHARLIVES, 	BASELIVES
 	call setPlayerData, CHARDIR, 	BASEDIR
 	call setPlayerData, CHARSHOOT, 	BASESHOOT
+	call setPlayerData, CHARDMG,	BASEDMG
+	call setPlayerData, CHARARMOR,	BASEARMOR
 	ret
 ENDP resetPlayer
 
@@ -415,7 +433,7 @@ PROC followChar
 	
 	cmp edx, [@@xpos]
 	jl @@increasexpos ; Increase it's position if it's lesser 
-	jg @@decreasexpos ; Decrease it's position if it's greater
+	jmp @@decreasexpos ; Decrease it's position if it's greater
 	
 	jmp @@ypostest
 	
@@ -433,7 +451,7 @@ PROC followChar
 		call vectorref, offset enemies, [@@enemy], ELEMYPOS
 		cmp edx, [@@ypos]
 		jl @@increaseypos
-		jg @@decreaseypos
+		jmp @@decreaseypos
 	
 		jmp @@return
 	
@@ -468,6 +486,56 @@ PROC enemiesFollow
 	ret
 ENDP enemiesFollow
 
+PROC enemyChangeDirection
+	ARG		@@enemy:dword
+	USES	edx
+	
+	call vectorref, offset enemies, [@@enemy], ELEMDIR
+	
+	cmp edx, STILL
+	je	@@return
+	cmp edx, LEFT
+	je	@@moveRight
+	cmp edx, RIGHT
+	je	@@moveLeft
+	cmp	edx, UP
+	je	@@moveDown
+	cmp edx, DOWN
+	je	@@moveUp
+	
+	@@moveRight:
+		call vectorset, offset enemies, [@@enemy], ELEMDIR, RIGHT
+		jmp	@@return
+	
+	@@moveLeft:
+		call vectorset, offset enemies, [@@enemy], ELEMDIR, LEFT
+		jmp	@@return
+	
+	@@moveDown:
+		call vectorset, offset enemies, [@@enemy], ELEMDIR, DOWN
+		jmp	@@return
+	
+	@@moveUp:
+		call vectorset, offset enemies, [@@enemy], ELEMDIR, UP
+		jmp	@@return
+		
+	@@return:
+		ret
+ENDP enemyChangeDirection
+
+PROC allEnemiesCD
+	USES	ebx, ecx
+	
+	mov ebx, offset enemies
+	xor ecx, ecx
+	mov cx, [ebx]
+	
+	@@loopEnemy:
+		call enemyChangeDirection, ecx
+		loop @@loopEnemy
+	ret
+ENDP allEnemiesCD
+
 ;;;;--------------------------------------------------------
 
 DATASEG
@@ -479,8 +547,8 @@ DATASEG
 	__keyb_keysActive			db ?			; number of actively pressed keys
 	
 	playerlen		dw	5
-					;	x-pos, y-pos, lives		direction	shooting?	damage		armor
-	playerdata		dw	 150, 	120, 	6,		1,			0,			20,			0
+					;		x-pos, 		y-pos, 		lives		direction	shooting?	damage		armor
+	playerdata		dw	 	BASEXPOS, 	BASEYPOS,	BASELIVES,	BASEDIR,	BASESHOOT,	BASEDMG,	BASEARMOR
 	
 	
 	;; vectors:
@@ -504,7 +572,24 @@ DATASEG
 							; alive, x-pos, y-pos,	direction,	collision?	lives
 					dw		1,		50,		80,		0,			1,			60
 					dw		1,		220,	150,	0,			1,			60
+					
+	objects			dw	11,	6	; amount of objects, amount of information per object
+	
+							; alive, x-pos, y-pos,	direction,	effect,		room
+					dw		1,		0,		0,		0,			2,			2
+					dw		1,		0,		0,		0,			2,			4
+					dw		1,		0,		0,		0,			1,			4
+					dw		1,		0,		0,		0,			1,			6
+					dw		1,		0,		0,		0,			2,			7
+					dw		1,		0,		0,		0,			1,			9
+					dw		1,		0,		0,		0,			1,			10
+					dw		1,		0,		0,		0,			2,			11
+					dw		1,		0,		0,		0,			2,			13
+					dw		1,		0,		0,		0,			1,			14
+					dw		1,		0,		0,		0,			1,			16
 
+					
+					
 STACK
 
 END

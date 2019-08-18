@@ -133,7 +133,7 @@ PROC drawRectangle
 	add	ax, [@@x0]
 
 	; Compute top left corner address
-	mov edi, VMEMADR
+	mov edi, offset screenBuffer
 	add edi, eax
 	
 	; Plot the top horizontal edge.
@@ -145,7 +145,7 @@ PROC drawRectangle
 		mov	al,[@@col]
 		rep stosb
 		add edi, SCRWIDTH	; set edi to the next line
-		sub edi, edx		; subtract the width so edi is on the left	
+		sub edi, edx		; substract the width so edi is on the left	
 		pop ecx
 		loop @@horloop	
 		
@@ -463,6 +463,28 @@ PROC testEnemyCollision
 	@@return:
 		ret
 ENDP testEnemyCollision
+
+PROC enemiesMove
+	USES	ebx, ecx, edx
+	
+	mov ebx, offset enemies
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of enemies
+	
+	; find every living enemy and make them move
+	@@findEnemy:
+		call vectorref, offset enemies, ecx, ELEMALIVE
+		cmp edx, FALSE
+		je @@next	; if the enemy is dead, he does not move
+		xor edx, edx
+		call vectorref, offset enemies, ecx, ELEMDIR
+		call moveObject, offset enemies, ecx, edx
+		@@next:
+		loop @@findEnemy
+		
+	@@return:
+		ret
+ENDP enemiesMove
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1316,6 +1338,8 @@ PROC moveObject
 	; get the y-position which is stored in edx
 	call vectorref, [@@array], [@@element], ELEMYPOS
 	
+	cmp [@@direction], STILL
+	je @@return
 	cmp [@@direction], LEFT
 	je @@moveLeft
 	cmp [@@direction], RIGHT
@@ -1417,7 +1441,7 @@ PROC main
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
 		call testProjectileCollision
-		call enemiesFollow
+		;call enemiesMove
 		
 		; test if we died and have to return to the menu
 		mov al, [offset gamestarted] ; upon dying, gamestarted is set to 0
