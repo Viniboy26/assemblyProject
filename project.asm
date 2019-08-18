@@ -1276,21 +1276,34 @@ PROC handlePickups
 	
 	; find the pickups that are in the room we are in and draw them as long as they were not picked up yet
 	@@findPickup:
-		call getPickupRoom, ecx	; the room in which the pickup is
-		cmp edx, [offset currentRoom]
+		xor eax, eax
+		xor ebx, ebx
+		call vectorref, offset pickups, ecx, ELEMALIVE
+		cmp	edx, FALSE
+		je @@next
+		call getPickupRoom, ecx		; the room in which the pickup is
+		cmp dx, [offset currentRoom]
 		jne @@next	; if the pickup is in another room, don't draw it
+		jmp @@draw
+		@@next:
+			loop @@findPickup
+			
+	jmp @@return
+			
+	@@draw:
+		xor edx, edx
 		call vectorref, offset pickups, ecx, ELEMXPOS
 		mov eax, edx	; store x-position of pickup in eax
 		call vectorref, offset pickups, ecx, ELEMYPOS
 		mov ebx, edx	; store y-position of pickup in ebx
-		call getPickupEffect ; store effect of pickup in edx
+		call getPickupEffect, ecx		; store effect of pickup in edx
 		cmp edx, ARMOR
 		je	@@drawArmor
-		call drawSprite, eax, ebx, damageBoost, offset screenBuffer
+		call drawSprite, eax, ebx, offset damageBoost, offset screenBuffer
+		jmp @@next
 		@@drawArmor:
-			call drawSprite, eax, ebx, armor, offset screenBuffer
-		@@next:
-			loop @@findPickup
+			call drawSprite, eax, ebx, offset armor, offset screenBuffer
+			jmp @@next
 		
 	@@return:
 		ret
@@ -1327,7 +1340,7 @@ PROC handleSprites
 	
 	@@findElements:	; find the elements that need to be drawn and draw them
 		call vectorref, [@@data], ecx, ELEMALIVE
-		cmp edx, 0	; if the element isn't alive, don't do anything and skip to next element
+		cmp edx, FALSE	; if the element isn't alive, don't do anything and skip to next element
 		je @@nextElement
 		xor eax, eax
 		
@@ -1482,12 +1495,13 @@ PROC main
 	
 		call	handleSprites, offset projectiles, offset stone
 		call	handleSprites, offset enemies, offset character
+		; call	handleSprites, offset pickups, offset damageBoost
 		
 		; Handle everything concerning the player
 		call handlePlayer
 		
 		; Handle everything concerning the pickups
-		; call handlePickups
+		call handlePickups
 		
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
