@@ -211,10 +211,19 @@ ENDP handlePlayer
 ;; Final Boss management
 
 PROC handleFinalBoss
+	USES	eax, ebx, ecx, edx
 	
 	mov ebx, offset currentRoom
 	cmp [ebx], FINALBOSSROOM
 	jne	@@return	; if we are not in the final boss room then skip everything
+	
+	mov ebx, offset finalboss
+	mov cx, [ebx]
+	call vectorref, offset finalboss, ecx, ELEMXPOS
+	mov eax, edx
+	call vectorref, offset finalboss, ecx, ELEMYPOS
+	mov ebx, edx
+	call drawSprite, eax, ebx, offset character, offset screenBuffer
 	
 	@@return:
 		ret
