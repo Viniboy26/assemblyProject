@@ -48,6 +48,8 @@ CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
 CHARDIR		EQU 4	; character's direction
 CHARSHOOT	EQU	5	; boolean, test if charater is shooting
+CHARDMG		EQU	6	; character's damage towards enemies
+CHARARMOR	EQU	7	; character's armor
 
 
 ; projectile constants
@@ -66,6 +68,8 @@ ELEMYPOS		EQU 3
 ELEMDIR			EQU	4
 ELEMCOLLISION	EQU	5
 ELEMLIVES		EQU	6
+
+ENEMYSPEED	    EQU 3
 
 ; number of keys to track
 KEYCNT EQU 89
@@ -89,9 +93,19 @@ PICKUPROOM		EQU	6	; room that the object is in
 ; Effects of pickups
 ARMOR		EQU	1
 DMGBOOST	EQU	2
+KEY			EQU	3
 
-; Room the player starts in
-STARTROOM	EQU	1
+; Noticable rooms
+STARTROOM		EQU	1
+
+; Room tiles
+HORIZONTALWALL1	EQU	1
+HORIZONTALWALL2	EQU	2
+FLOOR			EQU	3
+KEYDOOR			EQU	4
+
+; Skip a room to get to the next one
+SKIPROOM	EQU	66
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -168,7 +182,7 @@ ENDP drawRectangle
 ;; Player management
 
 PROC handlePlayer
-	USES eax, ebx, ecx, edx
+	USES eax, ecx, edx
 	
 	; Test if character remains in screen boundary
 	call testBoarders, offset character
@@ -197,7 +211,9 @@ PROC handlePlayer
 	jmp @@return									; after setting gamestarted to 0 return out of the function
 	
 	@@stillAlive:
-	call 	drawNSprites, 2, 2, ecx, 2, offset heart ; draw remaining lives	
+	call drawHearts, ecx
+	call getPlayerData, CHARARMOR
+	call drawArmor, edx
 	
 	@@return:
 		ret	
@@ -447,14 +463,19 @@ PROC pickupCollisionWithPlayer
 		call vectorref, offset pickups, [@@pickup], PICKUPEFFECT
 		cmp dx, ARMOR
 		je @@armorPickup
-		; It's a dmgboost pickup
+		cmp dx, KEY
+		je @@keyPickup
+		; It's a dmgboost pickup if it was nor KEY nor ARMOR
 		call dmgBoostPickedUp
-		
-		
 		jmp @@pickItUp
 		
 	@@armorPickup:
 	call armorPickedUp
+	jmp @@pickItUp
+	
+	@@keyPickup:
+		call keyPickedUp
+		jmp @@pickItUp
 		
 	@@pickItUp:
 		call vectorset, offset pickups, [@@pickup], ELEMALIVE, FALSE
@@ -519,13 +540,176 @@ PROC enemyCollisionWithBlock
 	jmp @@return
 	
 	@@collides:
-		;call killEnemy, [@@enemy]
+		call enemyChangeDirection, [@@enemy]
+		call vectorref, offset enemies, [@@enemy], ELEMDIR
+		cmp dx, LEFT
+		je @@setToRightOfBlock
+	
+		cmp dx, RIGHT
+		je @@setToLeftOfBlock
+	
+		cmp dx, UP
+		je @@setToBottomOfBlock
+	
+		cmp dx, DOWN
+		je @@setToTopOfBlock
+	
+	jmp @@return
+	
+	; charxpos = block's xpos + block's width
+	@@setToRightOfBlock:
+		xor eax,eax
+		mov eax, [ebx]					; eax is now the block's width
+		add ax, [@@blockXpos]			; eax is now the blokc's xpos + width
+		call vectorset, offset enemies, [@@enemy], ELEMXPOS, eax
+		jmp @@return
+		
+	; charxpos = block's xpos - char's width
+	@@setToLeftOfBlock:
+		xor eax, eax
+		mov ax, [@@blockXpos]
+		sub ax, [edi]
+		call vectorset, offset enemies, [@@enemy], ELEMXPOS, eax
+		jmp @@return
+		
+	@@setToBottomOfBlock:
+		xor eax, eax
+		mov ax, [@@blockYpos]
+		add ax, [edi + 2]
+		call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		jmp @@return
+		
+	@@setToTopOfBlock:
+		xor eax, eax
+		mov ax, [@@blockYpos]
+		sub ax, [edi + 2]
+		call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
 		
 	@@return:
 		ret
 ENDP enemyCollisionWithBlock
+	
 
-PROC enemyCollisionWithProjectile
+PROC collisionWithRoomEnemy
+	ARG  @@enemy:dword
+	USES eax, ebx, ecx, edx, edi, esi
+	
+	xor ecx,ecx
+	xor ebx,ebx
+	xor eax,eax
+	xor edi,edi
+	xor esi,esi
+	
+	mov cx, [offset currentRoom]	; index of the room that needs to be drawn
+	dec ecx
+	
+	mov edi, offset rooms
+	
+	cmp ecx,0
+	je @@index0
+	
+	@@goToRoomIndex:
+		add edi, 66
+		loop @@goToRoomIndex
+		
+	@@index0:
+		
+	mov ebx, 50		; the y begin position of every room
+	mov ecx, 6		; store the number of rows in ecx
+	mov esi, 10		; store the number of cols in esi
+	
+	add edi, 6		; move to the first room's sprite
+	
+	@@rowLoop:
+		push esi	; save the cols
+		xor eax,eax
+		@@colLoop:
+			push eax
+			mov al, [edi]	; The sprite that has to be collided with or not
+			
+			cmp al, FALSE
+			je @@noCollision	; no collision if there's no sprite
+			
+			cmp al, FLOOR		; no collision if there's a floor
+			je @@noCollision
+			
+			pop eax
+			call enemyCollisionWithBlock, [@@enemy], eax, ebx, offset enemy, offset horizontalWall
+			jmp @@endcolLoopIfCollided
+			
+			@@noCollision:
+			pop eax
+			@@endcolLoopIfCollided:
+			dec esi
+			inc edi
+			add eax, 32		; get eax to the next sprite x position
+			cmp esi, 0
+			jg @@colLoop
+		@@break:
+		pop esi
+		add ebx, 25
+		loop @@rowLoop
+		
+	ret
+ENDP collisionWithRoomEnemy
+
+
+PROC enemyCollisionWithProjectile; Test if a projectile collides with an enemy
+	ARG		@@projectile:dword, @@enemy:dword, @@enemyXpos:dword, @@enemyYpos:dword, @@sprite:dword, @@enemySprite:dword
+	USES 	eax, ebx, ecx, edx, edi
+	
+	xor eax, eax
+	xor ecx, ecx
+	xor edx, edx
+	xor edi, edi
+	
+	mov edi, [@@sprite]	; projectile
+	mov cl, [edi]		; projectile width  (stored in ecx)
+	
+	; test if the charxpos + it's width is greater then the block's xpos
+	call vectorref, offset projectiles, [@@projectile], ELEMXPOS
+	add dl, cl					; edx is now the ELEMXPOS + it's width
+	cmp edx, [@@enemyXpos]		; ELEMXPOS + projwidth > blockXpos ?
+	jg	@@test2
+	jmp @@return
+	
+	; test if the ELEMXPOS is lesser then the block's xpos + the block's width
+	@@test2:
+	xor eax,eax
+	mov ebx, [@@enemySprite]		; the block sprite is stored in ebx
+	mov eax, [ebx]					; eax is now the block's width
+	add eax, [@@enemyXpos]			; eax is now the block's xpos + width
+	call vectorref, offset projectiles, [@@projectile], ELEMXPOS
+	cmp dx, ax
+	jl @@test3
+	jmp @@return
+	
+	; test if the ELEMYPOS + it's height is greater then the block's ypos
+	@@test3:
+	xor eax, eax
+	mov al, [edi + 2]				; projectile-height (stored in eax)
+	call vectorref, offset projectiles, [@@projectile], ELEMYPOS
+	add dl, al					; edx is now the ELEMYPOS + it's height
+	cmp edx, [@@enemyYpos]
+	jg @@test4
+	jmp @@return
+	
+	; test if the ELEMYPOS is lesser then the block's ypos + the block's height
+	@@test4:
+	xor eax,eax
+	mov eax, [ebx + 2]
+	add eax, [@@enemyYpos]
+	call vectorref, offset projectiles, [@@projectile], ELEMYPOS
+	cmp dx, ax
+	jl @@collides
+	jmp @@return
+	
+	@@collides:
+		call deleteProjectile, [@@projectile]
+		call decreaseEnemyHealth, [@@enemy]
+		
+	@@return:
+		ret
 ENDP enemyCollisionWithProjectile
 
 ; Test collision for every enemy that is alive
@@ -562,15 +746,61 @@ PROC enemiesMove
 		call vectorref, offset enemies, ecx, ELEMALIVE
 		cmp edx, FALSE
 		je @@next	; if the enemy is dead, he does not move
-		xor edx, edx
 		call vectorref, offset enemies, ecx, ELEMDIR
-		call moveObject, offset enemies, ecx, edx
+		call moveObject, offset enemies, ecx, ENEMYSPEED, edx
 		@@next:
 		loop @@findEnemy
 		
 	@@return:
 		ret
 ENDP enemiesMove
+
+PROC handleEnemies
+	USES eax, ecx, edx
+	
+	xor ecx,ecx
+	mov cx, [offset enemies]
+	
+	@@loopAllEnemies:
+		call vectorref, offset enemies, ecx, ELEMALIVE
+		cmp edx, FALSE
+		je @@next
+		call vectorref, offset enemies, ecx, ELEMXPOS
+		mov eax, edx
+		call vectorref, offset enemies, ecx, ELEMYPOS
+		call collisionWithRoomEnemy, ecx
+		call collisionWithProjectiles, ecx, eax, edx
+		call vectorref, offset enemies, ecx, ELEMLIVES
+		cmp edx, 0
+		jg @@next
+		call killEnemy, ecx
+		@@next:
+		loop @@loopAllEnemies
+		
+	call	handleSprites, offset enemies, offset enemy
+	ret
+ENDP handleEnemies
+
+PROC collisionWithProjectiles
+	ARG @@enemy:dword, @@enemyXpos:dword, @@enemyYpos:dword
+	USES eax, ecx, edx
+	
+	xor ecx,ecx
+	mov cx,  [offset projectiles]
+	
+	@@loopAllProjectiles:
+		call vectorref, offset projectiles, ecx, ELEMALIVE
+		cmp edx, FALSE 
+		je @@next ; Don't collision with it if it's not alive
+		call vectorref, offset projectiles, ecx, ELEMXPOS
+		mov eax, edx
+		call vectorref, offset projectiles, ecx, ELEMYPOS
+		call enemyCollisionWithProjectile, ecx, [@@enemy], [@@enemyXpos], [@@enemyYpos], offset stone, offset enemy
+		@@next:
+		loop @@loopAllProjectiles
+
+	ret
+ENDP collisionWithProjectiles
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -649,6 +879,7 @@ PROC testBoarders
 	
 	@@setToLeftScreen:
 		call deleteAllProjectiles
+		call resetEnemies
 		push eax
 		mov edi, offset currentRoom
 		call getRoomDoorID, LEFT
@@ -663,6 +894,7 @@ PROC testBoarders
 	
 	@@setToRightScreen:
 		call deleteAllProjectiles
+		call resetEnemies
 		push eax
 		mov edi, offset currentRoom
 		call getRoomDoorID, RIGHT
@@ -687,6 +919,7 @@ PROC testBoarders
 	
 	@@setToTopScreen:
 		call deleteAllProjectiles
+		call resetEnemies
 		push eax
 		mov edi, offset currentRoom
 		call getRoomDoorID, UP
@@ -701,6 +934,7 @@ PROC testBoarders
 	
 	@@setToBottomScreen:
 		call deleteAllProjectiles
+		call resetEnemies
 		mov edi, offset currentRoom
 		call getRoomDoorID, DOWN
 		xor eax,eax
@@ -719,7 +953,7 @@ ENDP testBoarders
 
 ; Room management
 
-; store the the desired door (left, right, up, down) roomID in edx
+; store the desired door (left, right, up, down) roomID in edx
 PROC getRoomDoorID
 	ARG  @@doorSide:byte RETURNS edx
 	USES ebx, ecx
@@ -734,7 +968,7 @@ PROC getRoomDoorID
 	je @@room1
 	
 	@@getToRoomIndex:
-		add ebx, 66
+		add ebx, SKIPROOM
 		loop @@getToRoomIndex
 		
 	@@room1:
@@ -771,7 +1005,7 @@ PROC drawRoom
 	je @@index0
 	
 	@@goToRoomIndex:
-		add ebx, 66
+		add ebx, SKIPROOM
 		loop @@goToRoomIndex
 		
 	@@index0:
@@ -789,17 +1023,20 @@ PROC drawRoom
 			push eax
 			mov al, [ebx]	; The sprite that has to be drawn
 			
-			cmp al, 0
-			je @@endcolLoop	; draw no sprite if 0
+			cmp al, FALSE
+			je @@endcolLoop	; draw no sprite if FALSE
 			
-			cmp al, 1
+			cmp al, HORIZONTALWALL1
 			je @@drawHorWall	; draw horizontallWall if 1
 			
-			cmp al, 2
+			cmp al, HORIZONTALWALL2
 			je @@drawHorWall2
 			
-			cmp al, 3
+			cmp al, FLOOR
 			je @@drawFloor
+			
+			cmp al, KEYDOOR
+			je @@drawKeyDoor
 			
 			jmp @@endcolLoop
 			
@@ -819,19 +1056,29 @@ PROC drawRoom
 				jmp @@endcolLoopIfDrawn
 			
 			@@endcolLoop:
-			pop eax
-			@@endcolLoopIfDrawn:
+				pop eax
+		@@endcolLoopIfDrawn:
 			dec esi
 			inc ebx
 			add eax, 32		; get eax to the next sprite x position
 			cmp esi, 0
 			jg @@colLoop
+				
 		@@break:
-		pop esi
-		add edi, 25
-		loop @@rowLoop
+			pop esi
+			add edi, 25
+			loop @@rowLoop
+			
+		jmp @@return
 		
-	ret
+		@@drawKeyDoor:
+			pop eax
+			call drawSprite, eax, edi, offset keydoor, offset screenBuffer
+			jmp @@endcolLoopIfDrawn
+
+		
+	@@return:
+		ret
 ENDP drawRoom
 
 PROC collisionWithBlock
@@ -1329,26 +1576,6 @@ ENDP terminateProcess
 
 ;; Drawing management
 
-
-PROC drawBackground
-	USES 	eax, ebx, ecx, edx, edi
-	
-	xor ecx,ecx
-	xor ebx,ebx
-	xor eax,eax
-	xor edi,edi
-	
-	mov ebx, 50
-	mov ecx, 6		; store the number of rows in ecx
-	
-	@@rowLoop:
-		call drawNSprites, 0, ebx, 10, 0, offset background
-		add ebx, 25
-		loop @@rowLoop
-		
-	ret
-ENDP drawBackground
-
 PROC handlePickups
 	USES	eax, ebx, ecx, edx
 	
@@ -1379,7 +1606,9 @@ PROC handlePickups
 		mov ebx, edx									; store y-position of pickup in ebx
 		call getPickupEffect, ecx						; store effect of pickup in edx
 		cmp edx, ARMOR
-		je	@@drawArmor			
+		je	@@drawArmor
+		cmp edx, KEY
+		je	@@drawKey
 			push eax
 			xor edx, edx
 			call getPlayerData, CHARXPOS
@@ -1401,7 +1630,17 @@ PROC handlePickups
 			pop eax
 			call drawSprite, eax, ebx, offset armor, offset screenBuffer
 			jmp @@next
-			
+		@@drawKey:
+			push eax
+			xor edx, edx
+			call getPlayerData, CHARXPOS
+			mov eax, edx
+			call getPlayerData, CHARYPOS
+			; Collide with the pickup
+			call pickupCollisionWithPlayer, ecx, eax, edx, offset key, offset character
+			pop eax
+			call drawSprite, eax, ebx, offset key, offset screenBuffer
+			jmp @@next
 	
 		
 	@@return:
@@ -1419,15 +1658,29 @@ PROC drawNSprites
 	mov edi, [@@sprite]
 	
 	movzx ecx, [@@nSprites]		; total sprites to print
+	cmp ecx, 0
+	je	@@return
 	
 	@loop:
 		call drawSprite, ebx, edx, [@@sprite], offset screenBuffer
 		add ebx, [edi]
 		add ebx, eax
 		loop @loop
-		
-	ret
+	@@return:
+		ret
 ENDP drawNSprites
+
+PROC drawHearts
+	ARG		@@amount:dword
+	call 	drawNSprites, 2, 2, [@@amount], 2, offset heart ; draw remaining lives	
+	ret
+ENDP drawHearts
+
+PROC drawArmor
+	ARG		@@amount:dword
+	call	drawNSprites, 2, 12, [@@amount], 2, offset armor
+	ret
+ENDP drawArmor
 
 PROC handleSprites
 	ARG		@@data:dword, @@sprite:dword
@@ -1465,19 +1718,19 @@ PROC handleSprites
 		jmp @@return ; once looped over all elements, return out of the function
 		
 		@@moveLeft:
-			call moveObject, [@@data], ecx, LEFT
+			call moveObject, [@@data], ecx, PROJSPEED, LEFT
 			jmp @@nextElement
 			
 		@@moveRight:
-			call moveObject, [@@data], ecx, RIGHT
+			call moveObject, [@@data], ecx, PROJSPEED, RIGHT
 			jmp @@nextElement
 		
 		@@moveUp:
-			call moveObject, [@@data], ecx, UP
+			call moveObject, [@@data], ecx, PROJSPEED, UP
 			jmp @@nextElement
 			
 		@@moveDown:
-			call moveObject, [@@data], ecx, DOWN
+			call moveObject, [@@data], ecx, PROJSPEED, DOWN
 			jmp @@nextElement
 		
 	@@return:
@@ -1488,7 +1741,7 @@ ENDP handleSprites
 
 
 PROC moveObject
-	ARG		@@array:dword, @@element:dword, @@direction:byte
+	ARG		@@array:dword, @@element:dword, @@speed:word, @@direction:byte
 	USES 	eax, edx
 	
 	; store the x-position of the element in eax
@@ -1510,22 +1763,22 @@ PROC moveObject
 	je @@moveDown
 	
 	@@moveLeft:
-		sub ax, PROJSPEED
+		sub ax, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMXPOS, ax
 		jmp @@return
 		
 	@@moveRight:
-		add ax, PROJSPEED
+		add ax, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMXPOS, ax
 		jmp @@return
 		
 	@@moveUp:
-		sub dx, PROJSPEED
+		sub dx, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMYPOS, dx
 		jmp @@return
 		
 	@@moveDown:
-		add dx, PROJSPEED
+		add dx, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMYPOS, dx
 		jmp @@return
 	
@@ -1543,6 +1796,7 @@ PROC resetAll
 	mov ebx, offset currentRoom
 	mov [ebx], STARTROOM
 	call resetPlayer
+	call resetEnemies
 	ret
 ENDP resetAll
 
@@ -1607,13 +1861,17 @@ PROC main
 		call	drawRoom, offset rooms
 	
 		call	handleSprites, offset projectiles, offset stone
-		call	handleSprites, offset enemies, offset enemy
 		
 		; Handle everything concerning the pickups
 		call	handlePickups
 		
+		
 		; Handle everything concerning the player
-		call handlePlayer
+		call	handlePlayer
+		
+		call 	enemiesMove
+		
+		call	handleEnemies
 		
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
@@ -1682,15 +1940,17 @@ ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
-	currentRoom		dw STARTROOM	; room the player is in
+	currentRoom		dw 	STARTROOM	; room the player is in
 	
-	gamestarted		db 0	; boolean to test if game has started
+	gamestarted		db 	FALSE	; boolean to test if game has started
 	
-	gamepaused		db 0	; boolean to test if the game is paused
+	gamepaused		db 	FALSE	; boolean to test if the game is paused
 
-	menuoption		db 1	; holds the current menu option
+	menuoption		db 	START	; holds the current menu option
 	
-	pauseoption		db 1	; holds the current pause option
+	pauseoption		db 	RESUME	; holds the current pause option
+	
+	collwithEnemy	db	FALSE	; boolean to test if the player has collided with an enemy
 	
 	keybscancodes 	db 29h, 02h, 03h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 	52h, 47h, 49h, 	45h, 35h, 2FH, 4Ah
 					db 0Fh, 10h, 11h, 12h, 13h, 14h, 15h, 16h, 17h, 18h, 19h, 1Ah, 1Bh, 		53h, 4Fh, 51h, 	47h, 48h, 49h, 		1Ch, 4Eh
