@@ -67,8 +67,7 @@ PICKUPROOM		EQU	6	; room that the object is in
 ; Effects of pickups
 ARMOR		EQU	1
 DMGBOOST	EQU	2
-KEY			EQU	3
-CHEST		EQU	4	
+KEYB		EQU	3	
 
 ; Upon collecting a pickup
 EXTRADMG	EQU	8
@@ -688,9 +687,20 @@ PROC keyPickedUp
 	ret
 ENDP keyPickedUp
 
-PROC resetPickups
+PROC resetPickups	
+	USES	ebx, ecx
+	
+	mov ebx, offset pickups
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of pickups
+	
+	; loop through every pickup and reset them
+	@@resetPickup:
+		call vectorset, offset pickups, ecx, ELEMALIVE, TRUE
+		loop @@resetPickup
+		
+	ret
 ENDP resetPickups
-
 
 ;;;;--------------------------------------------------------
 

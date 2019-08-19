@@ -37,7 +37,7 @@ UP			EQU 3
 DOWN		EQU 4
 
 ; character constants
-CHARSPEED	EQU 15	
+CHARSPEED	EQU 4	
 CHARWIDTH	EQU 25	; character width
 CHARHEIGHT	EQU 25	; character height
 CHARCOLOR	EQU 40 	; character color
@@ -69,7 +69,7 @@ ELEMDIR			EQU	4
 ELEMCOLLISION	EQU	5
 ELEMLIVES		EQU	6
 
-ENEMYSPEED	    EQU 3
+ENEMYSPEED	    EQU 0
 
 ; number of keys to track
 KEYCNT EQU 89
@@ -94,7 +94,7 @@ PICKUPROOM		EQU	6	; room that the object is in
 ARMOR		EQU	1
 DMGBOOST	EQU	2
 KEY			EQU	3
-CHEST		EQU	4
+CHEST       EQU 4
 
 ; Noticable rooms
 STARTROOM		EQU	1
@@ -490,6 +490,7 @@ PROC pickupCollisionWithPlayer
 	ret
 ENDP pickupCollisionWithPlayer
 
+
 ;;;;---------------------------------------------------------------------------------------------------
 
 ;; Enemy collision management 
@@ -546,7 +547,6 @@ PROC enemyCollisionWithBlock
 	jmp @@return
 	
 	@@collides:
-		call enemyChangeDirection, [@@enemy]
 		call vectorref, offset enemies, [@@enemy], ELEMDIR
 		cmp dx, LEFT
 		je @@setToRightOfBlock
@@ -568,6 +568,7 @@ PROC enemyCollisionWithBlock
 		mov eax, [ebx]					; eax is now the block's width
 		add ax, [@@blockXpos]			; eax is now the blokc's xpos + width
 		call vectorset, offset enemies, [@@enemy], ELEMXPOS, eax
+		call enemyChangeDirection, [@@enemy]
 		jmp @@return
 		
 	; charxpos = block's xpos - char's width
@@ -576,20 +577,23 @@ PROC enemyCollisionWithBlock
 		mov ax, [@@blockXpos]
 		sub ax, [edi]
 		call vectorset, offset enemies, [@@enemy], ELEMXPOS, eax
+		call enemyChangeDirection, [@@enemy]
 		jmp @@return
 		
 	@@setToBottomOfBlock:
 		xor eax, eax
 		mov ax, [@@blockYpos]
 		add ax, [edi + 2]
-		call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		;call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		call enemyChangeDirection, [@@enemy]
 		jmp @@return
 		
 	@@setToTopOfBlock:
 		xor eax, eax
 		mov ax, [@@blockYpos]
 		sub ax, [edi + 2]
-		call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		;call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		call enemyChangeDirection, [@@enemy]
 		
 	@@return:
 		ret
@@ -1760,7 +1764,7 @@ ENDP handleSprites
 
 
 PROC moveObject
-	ARG		@@array:dword, @@element:dword, @@speed:word, @@direction:byte
+	ARG		@@array:dword, @@element:dword, @@speed:dword, @@direction:byte
 	USES 	eax, edx
 	
 	; store the x-position of the element in eax
@@ -1782,22 +1786,22 @@ PROC moveObject
 	je @@moveDown
 	
 	@@moveLeft:
-		sub ax, [@@speed]
+		sub eax, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMXPOS, ax
 		jmp @@return
 		
 	@@moveRight:
-		add ax, [@@speed]
+		add eax, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMXPOS, ax
 		jmp @@return
 		
 	@@moveUp:
-		sub dx, [@@speed]
+		sub edx, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMYPOS, dx
 		jmp @@return
 		
 	@@moveDown:
-		add dx, [@@speed]
+		add edx, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMYPOS, dx
 		jmp @@return
 	
@@ -1816,6 +1820,7 @@ PROC resetAll
 	mov [ebx], STARTROOM
 	call resetPlayer
 	call resetEnemies
+	call resetPickups
 	ret
 ENDP resetAll
 

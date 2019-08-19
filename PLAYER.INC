@@ -35,6 +35,7 @@ GLOBAL	deletePickup:PROC, \
 		dmgBoostPickedUp:PROC, \
 		armorPickedUp:PROC, \
 		keyPickedUp:PROC, \
+		resetPickups:PROC, \
 		pickups:WORD
 		
 GLOBAL	rooms:BYTE
