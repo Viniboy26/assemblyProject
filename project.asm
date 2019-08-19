@@ -37,7 +37,7 @@ UP			EQU 3
 DOWN		EQU 4
 
 ; character constants
-CHARSPEED	EQU 6	
+CHARSPEED	EQU 4	
 CHARWIDTH	EQU 25	; character width
 CHARHEIGHT	EQU 25	; character height
 CHARCOLOR	EQU 40 	; character color
@@ -48,6 +48,8 @@ CHARYPOS	EQU 2	; character begin y-position
 CHARLIVES	EQU 3 	; number of lives character has
 CHARDIR		EQU 4	; character's direction
 CHARSHOOT	EQU	5	; boolean, test if charater is shooting
+CHARDMG		EQU	6	; character's damage towards enemies
+CHARARMOR	EQU	7	; character's
 
 
 ; projectile constants
@@ -1082,7 +1084,7 @@ PROC returnToMenu
 	call selectOption, offset gamepaused, FALSE
 	call selectOption, offset gamestarted, FALSE
 	call resetAll
-	call wait_VBLANK, 3
+	call wait_VBLANK, 5
 	ret
 ENDP returnToMenu
 
@@ -1682,15 +1684,17 @@ ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
-	currentRoom		dw STARTROOM	; room the player is in
+	currentRoom		dw 	STARTROOM	; room the player is in
 	
-	gamestarted		db 0	; boolean to test if game has started
+	gamestarted		db 	FALSE	; boolean to test if game has started
 	
-	gamepaused		db 0	; boolean to test if the game is paused
+	gamepaused		db 	FALSE	; boolean to test if the game is paused
 
-	menuoption		db 1	; holds the current menu option
+	menuoption		db 	START	; holds the current menu option
 	
-	pauseoption		db 1	; holds the current pause option
+	pauseoption		db 	RESUME	; holds the current pause option
+	
+	collwithEnemy	db	FALSE	; boolean to test if the player has collided with an enemy
 	
 	keybscancodes 	db 29h, 02h, 03h, 04h, 05h, 06h, 07h, 08h, 09h, 0Ah, 0Bh, 0Ch, 0Dh, 0Eh, 	52h, 47h, 49h, 	45h, 35h, 2FH, 4Ah
 					db 0Fh, 10h, 11h, 12h, 13h, 14h, 15h, 16h, 17h, 18h, 19h, 1Ah, 1Bh, 		53h, 4Fh, 51h, 	47h, 48h, 49h, 		1Ch, 4Eh
