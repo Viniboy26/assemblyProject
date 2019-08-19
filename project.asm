@@ -1686,7 +1686,7 @@ PROC main
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
 		call testProjectileCollision
-		;call enemiesMove
+		call enemiesMove
 		
 		; test if we died and have to return to the menu
 		mov al, [offset gamestarted] ; upon dying, gamestarted is set to 0
