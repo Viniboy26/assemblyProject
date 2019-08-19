@@ -18,4 +18,5 @@ GLOBAL	background:WORD, \
 		armor:WORD, \
 		damageBoost:WORD, \
 		key:WORD, \
-		chest:WORD
+		chest:WORD, \
+		crown:WORD
