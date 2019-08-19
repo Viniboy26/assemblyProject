@@ -19,12 +19,14 @@ GLOBAL	shootProjectile:PROC, \
 		deleteAllProjectiles:PROC, \
 		projectiles:WORD
 		
-GLOBAL	killEnemy:PROC, \
+GLOBAL	decreaseEnemyHealth:PROC, \
+		killEnemy:PROC, \
 		deleteAllEnemies:PROC, \
 		followChar:PROC, \
 		enemiesFollow:PROC, \
 		enemyChangeDirection:PROC, \
 		allEnemiesCD:PROC, \
+		resetEnemies:PROC, \
 		enemies:WORD
 		
 GLOBAL	deletePickup:PROC, \
@@ -34,8 +36,5 @@ GLOBAL	deletePickup:PROC, \
 		armorPickedUp:PROC, \
 		keyPickedUp:PROC, \
 		pickups:WORD
-		
-GLOBAL	finalBossDies:PROC, \
-		finalboss:WORD
 		
 GLOBAL	rooms:BYTE

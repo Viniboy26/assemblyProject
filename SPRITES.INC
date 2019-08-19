@@ -14,6 +14,7 @@ GLOBAL	background:WORD, \
 		armor:WORD, \
 		damageBoost:WORD, \
 		key:WORD, \
+		chest:WORD, \
 		_start:WORD, \
 		_exit:WORD, \
 		_back:WORD, \

@@ -27,12 +27,6 @@ BASESHOOT	EQU	0
 BASEDMG		EQU	20
 BASEARMOR	EQU	0
 
-; Base values of final boss
-FINALBOSSXPOS	EQU	150
-FINALBOSSYPOS	EQU	120
-FINALBOSSDIR	EQU	0
-FINALBOSSCOLL	EQU	1
-FINALBOSSLIVES	EQU	250
 
 ; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
@@ -55,6 +49,17 @@ ELEMDIR			EQU	4
 ELEMCOLLISION	EQU	5
 ELEMLIVES		EQU	6
 
+; Base stats for ENEMY1
+BASEENEMY1X		EQU 50
+BASEENEMY1Y		EQU 80
+
+; Base stats for ENEMY2
+BASEENEMY2X		EQU 220
+BASEENEMY2Y		EQU 150
+
+; Base enemy HP
+BASEENEMYLIVES 	EQU 80
+
 ; Indexes of gamedata information in "objects" vector
 PICKUPEFFECT	EQU	5	; effect that the object has upon picking it up
 PICKUPROOM		EQU	6	; room that the object is in
@@ -62,7 +67,8 @@ PICKUPROOM		EQU	6	; room that the object is in
 ; Effects of pickups
 ARMOR		EQU	1
 DMGBOOST	EQU	2
-KEYB		EQU	3	
+KEY			EQU	3
+CHEST		EQU	4	
 
 ; Upon collecting a pickup
 EXTRADMG	EQU	8
@@ -72,9 +78,6 @@ HORIZONTALWALL1	EQU	1
 HORIZONTALWALL2	EQU	2
 FLOOR			EQU	3
 KEYDOOR			EQU	4
-
-; Noticable room
-FINALBOSSROOM	EQU	8
 
 ; Skip a room to get to the next one
 SKIPROOM	EQU	66
@@ -256,6 +259,7 @@ PROC decreaseHealth
 	call getPlayerData, CHARLIVES
 	dec edx
 	call setPlayerData, CHARLIVES, edx
+	
 	ret
 ENDP decreaseHealth
 
@@ -435,11 +439,12 @@ PROC decreaseEnemyHealth
 	ARG		@@enemy:dword
 	USES	eax, edx
 	
+	xor eax,eax
 	call getPlayerData, CHARDMG
 	mov eax, edx
-	call vectorref, offset enemies, [@@enemy], ELEMALIVE
+	call vectorref, offset enemies, [@@enemy], ELEMLIVES
 	sub edx, eax
-	call vectorset, offset enemies, [@@enemy], ELEMALIVE, edx
+	call vectorset, offset enemies, [@@enemy], ELEMLIVES, edx
 	ret
 ENDP decreaseEnemyHealth
 
@@ -465,6 +470,38 @@ PROC deleteAllEnemies
 	@@return:
 		ret
 ENDP deleteAllEnemies
+
+PROC resetEnemies
+	USES ecx, edx
+	
+	xor ecx,ecx
+	mov cx, [offset enemies]
+	
+	@@reset:
+		; For enemy 2
+		call vectorset, offset enemies, ecx, ELEMALIVE,TRUE
+		call vectorset, offset enemies, ecx, ELEMXPOS, BASEENEMY2X
+		call vectorset, offset enemies, ecx, ELEMYPOS, BASEENEMY2Y
+		call vectorset, offset enemies, ecx, ELEMLIVES,BASEENEMYLIVES
+		dec ecx
+		; For enemy 1
+		jmp @@enemy1
+		@@next:
+		loop @@reset
+		
+		jmp @@return
+		
+		@@enemy1:
+		call vectorset, offset enemies, ecx, ELEMALIVE,TRUE
+		call vectorset, offset enemies, ecx, ELEMXPOS, BASEENEMY1X
+		call vectorset, offset enemies, ecx, ELEMYPOS, BASEENEMY1Y
+		call vectorset, offset enemies, ecx, ELEMLIVES,BASEENEMYLIVES
+		jmp @@next
+		
+	
+	@@return:		
+	ret
+ENDP resetEnemies
 
 PROC followChar
 	ARG 	@@enemy:dword, @@xpos: dword, @@ypos: dword
@@ -605,15 +642,24 @@ PROC dmgBoostPickedUp
 	call getPlayerData, CHARLIVES
 	cmp edx, 1
 	je	@@return	; if the player only has one heart left, the item has no effect (but will still be picked up and dissapear)
-	xor edx, edx
 	call decreaseHealth
-	call getPlayerData, CHARDMG
-	add edx, EXTRADMG
-	call setPlayerData, CHARDMG, edx
+	;call increaseDamage
 	
 	@@return:
 		ret
 ENDP dmgBoostPickedUp
+
+
+; This doesn't work and we have no idea why, if we replace the edx with BASEDMG, 
+; nothing changes (as it's supposed to do) but whenever we put anything else, it doesn't work
+PROC increaseDamage
+	USES edx
+	xor edx, edx
+	call getPlayerData, CHARDMG
+	add edx, EXTRADMG
+	call setPlayerData, CHARDMG, edx
+	ret
+ENDP increaseDamage
 
 PROC armorPickedUp
 	USES	edx
@@ -627,7 +673,7 @@ ENDP armorPickedUp
 PROC keyPickedUp
 	USES	ebx, ecx
 	mov ebx, offset rooms
-	mov ecx, FINALBOSSROOM
+	mov ecx, 8
 	
 	@@getToRoomNextToFinalBoss:
 		add ebx, SKIPROOM
@@ -642,27 +688,9 @@ PROC keyPickedUp
 	ret
 ENDP keyPickedUp
 
-;;;;--------------------------------------------------------
+PROC resetPickups
+ENDP resetPickups
 
-;; Final Boss management
-
-PROC finalBossDies
-	USES	edx
-
-	call vectorref, offset finalboss, ELEMCOLLISION
-	cmp edx, FALSE
-	je	@@actuallyDies
-	; if elemcollision is TRUE, the final boss actually revives but we decrease elemcollision by 1
-	dec edx
-	call vectorset, offset finalboss, ELEMCOLLISION, edx
-	call vectorset, offset finalboss, ELEMLIVES, FINALBOSSLIVES
-	jmp @@return
-	
-	@@actuallyDies: ; if elemcollision is FALSE, the final boss actually dies
-		call vectorset, offset finalboss, ELEMALIVE, FALSE
-	@@return:
-		ret
-ENDP finalBossDies
 
 ;;;;--------------------------------------------------------
 
@@ -698,10 +726,10 @@ DATASEG
 	enemies			dw	2,	12	; amount of enemies, amount of information in bytes per enemy
 	
 							; alive, x-pos, y-pos,	direction,	collision?	lives
-					dw		1,		50,		80,		0,			1,			80
-					dw		1,		220,	150,	0,			1,			80
+					dw		1,		BASEENEMY1X,		BASEENEMY1Y,		DOWN,			1,			BASEENEMYLIVES
+					dw		1,		BASEENEMY2X,	    BASEENEMY2Y,	    LEFT,			1,			BASEENEMYLIVES
 					
-	pickups			dw	12,	12	; amount of pickups, amount of information in bytes per pickup
+	pickups			dw	13,	12	; amount of pickups, amount of information in bytes per pickup
 	
 							; alive, 	x-pos, 		y-pos,		direction,	effect,		room
 					dw		1,			150,		120,		0,			2,			2
@@ -717,11 +745,9 @@ DATASEG
 					dw		1,			140,		115,		0,			1,			16
 						; unique key:
 					dw		1,			150,		120,		0,			3,			7
+						; unique chest:
+					dw		1,			150,		120,		0,			4,			8
 					
-	finalboss		dw	1, 12
-	
-							; alive,		x-pos, 			y-pos,			direction,		collision?, 	lives
-					dw		TRUE,			FINALBOSSXPOS,	FINALBOSSYPOS,	FINALBOSSDIR,	FINALBOSSCOLL,	FINALBOSSLIVES
 					
 							;	number, leftside, rightside, upside, downside, doors open?
 	rooms	DB 1, 0, 2, 0, 0, 0
