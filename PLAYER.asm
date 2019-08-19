@@ -655,7 +655,7 @@ DATASEG
 					
 	pickups			dw	11,	6	; amount of pickups, amount of information per pickup
 	
-							; alive, 	x-pos, 	y-pos,			direction,	effect,		room
+							; alive, 	x-pos, 		y-pos,		direction,	effect,		room
 					dw		1,			150,		120,		0,			2,			2
 					dw		1,			110,		80,			0,			2,			4
 					dw		1,			150,		120,		0,			1,			4
