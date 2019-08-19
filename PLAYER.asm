@@ -240,13 +240,22 @@ ENDP setPlayerData
 
 ; Decrease player's health by 1
 PROC decreaseHealth
-	USES edx
+	USES	edx
 	
 	call getPlayerData, CHARLIVES
 	dec edx
 	call setPlayerData, CHARLIVES, edx
 	ret
 ENDP decreaseHealth
+
+PROC decreaseArmor
+	USES	edx
+	
+	call getPlayerData, CHARARMOR
+	dec edx
+	call setPlayerData, CHARARMOR, edx
+	ret
+ENDP decreaseArmor
 
 ; Reset Player
 PROC resetPlayer

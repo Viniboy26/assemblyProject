@@ -8,6 +8,7 @@ GLOBAL __keyb_keysActive:BYTE
 GLOBAL	getPlayerData:PROC, \
 		setPlayerData:PROC, \
 		decreaseHealth:PROC, \
+		decreaseArmor:PROC, \
 		resetPlayer:PROC
 		
 GLOBAL	vectorref:PROC, \
