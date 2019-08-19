@@ -16,4 +16,5 @@ GLOBAL	background:WORD, \
 		_back:WORD, \
 		menu:WORD, \
 		armor:WORD, \
-		damageBoost:WORD
+		damageBoost:WORD, \
+		key:WORD
