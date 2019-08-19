@@ -576,10 +576,8 @@ PROC getPickupEffect
 ENDP getPickupEffect
 
 PROC dmgBoostPickedUp
-	ARG		@@pickup:dword
 	USES	edx
 	
-	call deletePickup, [@@pickup]
 	call decreaseHealth
 	call getPlayerData, CHARDMG
 	add edx, EXTRADMG
@@ -588,10 +586,8 @@ PROC dmgBoostPickedUp
 ENDP dmgBoostPickedUp
 
 PROC armorPickedUp
-	ARG		@@pickup
 	USES	edx
 	
-	call deletePickup, [@@pickup]
 	call getPlayerData, CHARARMOR
 	inc edx
 	call setPlayerData, CHARARMOR, edx
@@ -661,9 +657,9 @@ DATASEG
 	
 							; alive, x-pos, y-pos,	direction,	effect,		room
 					dw		1,		150,		120,		0,			2,			2
-					dw		1,		0,		0,		0,			2,			4
-					dw		1,		0,		0,		0,			1,			4
-					dw		1,		0,		0,		0,			1,			6
+					dw		1,		110,		80,		0,			2,			4
+					dw		1,		150,		120,		0,			1,			4
+					dw		1,		120,		130	,		0,			1,			6
 					dw		1,		0,		0,		0,			2,			7
 					dw		1,		0,		0,		0,			1,			9
 					dw		1,		0,		0,		0,			1,			10
