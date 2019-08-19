@@ -92,8 +92,9 @@ PICKUPROOM		EQU	6	; room that the object is in
 ARMOR		EQU	1
 DMGBOOST	EQU	2
 
-; Room the player starts in
-STARTROOM	EQU	1
+; Noticable rooms
+STARTROOM		EQU	1
+FINALBOSSROOM	EQU	8
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -204,6 +205,20 @@ PROC handlePlayer
 	@@return:
 		ret	
 ENDP handlePlayer
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Final Boss management
+
+PROC handleFinalBoss
+	
+	mov ebx, offset currentRoom
+	cmp [ebx], FINALBOSSROOM
+	jne	@@return	; if we are not in the final boss room then skip everything
+	
+	@@return:
+		ret
+ENDP handleFinalBoss
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1614,8 +1629,11 @@ PROC main
 		; Handle everything concerning the pickups
 		call	handlePickups
 		
+		; Handle everything concerning the final boss
+		call	handleFinalBoss
+		
 		; Handle everything concerning the player
-		call handlePlayer
+		call	handlePlayer
 		
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
