@@ -101,6 +101,7 @@ FINALBOSSROOM	EQU	8
 HORIZONTALWALL1	EQU	1
 HORIZONTALWALL2	EQU	2
 FLOOR			EQU	3
+KEYDOOR			EQU	4
 
 ; Skip a room to get to the next one
 SKIPROOM	EQU	66
@@ -498,7 +499,8 @@ PROC pickupCollisionWithPlayer
 	jmp @@pickItUp
 	
 	@@keyPickup:
-	
+		call keyPickedUp
+		jmp @@pickItUp
 		
 	@@pickItUp:
 		call vectorset, offset pickups, [@@pickup], ELEMALIVE, FALSE
@@ -815,7 +817,7 @@ PROC drawRoom
 	je @@index0
 	
 	@@goToRoomIndex:
-		add ebx, 66
+		add ebx, SKIPROOM
 		loop @@goToRoomIndex
 		
 	@@index0:
@@ -845,6 +847,9 @@ PROC drawRoom
 			cmp al, FLOOR
 			je @@drawFloor
 			
+			cmp al, KEYDOOR
+			je @@drawKeyDoor
+			
 			jmp @@endcolLoop
 			
 			@@drawHorWall:
@@ -863,19 +868,29 @@ PROC drawRoom
 				jmp @@endcolLoopIfDrawn
 			
 			@@endcolLoop:
-			pop eax
-			@@endcolLoopIfDrawn:
+				pop eax
+		@@endcolLoopIfDrawn:
 			dec esi
 			inc ebx
 			add eax, 32		; get eax to the next sprite x position
 			cmp esi, 0
 			jg @@colLoop
+				
 		@@break:
-		pop esi
-		add edi, 25
-		loop @@rowLoop
+			pop esi
+			add edi, 25
+			loop @@rowLoop
+			
+		jmp @@return
 		
-	ret
+		@@drawKeyDoor:
+			pop eax
+			call drawSprite, eax, edi, offset keydoor, offset screenBuffer
+			jmp @@endcolLoopIfDrawn
+
+		
+	@@return:
+		ret
 ENDP drawRoom
 
 PROC collisionWithBlock
@@ -1403,7 +1418,9 @@ PROC handlePickups
 		mov ebx, edx									; store y-position of pickup in ebx
 		call getPickupEffect, ecx						; store effect of pickup in edx
 		cmp edx, ARMOR
-		je	@@drawArmor			
+		je	@@drawArmor
+		cmp edx, KEY
+		je	@@drawKey
 			push eax
 			xor edx, edx
 			call getPlayerData, CHARXPOS
@@ -1425,7 +1442,17 @@ PROC handlePickups
 			pop eax
 			call drawSprite, eax, ebx, offset armor, offset screenBuffer
 			jmp @@next
-			
+		@@drawKey:
+			push eax
+			xor edx, edx
+			call getPlayerData, CHARXPOS
+			mov eax, edx
+			call getPlayerData, CHARYPOS
+			; Collide with the pickup
+			call pickupCollisionWithPlayer, ecx, eax, edx, offset key, offset character
+			pop eax
+			call drawSprite, eax, ebx, offset key, offset screenBuffer
+			jmp @@next
 	
 		
 	@@return:

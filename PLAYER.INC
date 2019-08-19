@@ -32,6 +32,7 @@ GLOBAL	deletePickup:PROC, \
 		getPickupEffect:PROC, \
 		dmgBoostPickedUp:PROC, \
 		armorPickedUp:PROC, \
+		keyPickedUp:PROC, \
 		pickups:WORD
 		
 GLOBAL	finalBossDies:PROC, \

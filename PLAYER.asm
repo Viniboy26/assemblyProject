@@ -67,9 +67,17 @@ KEYB		EQU	3
 ; Upon collecting a pickup
 EXTRADMG	EQU	8
 
-; Noticable room
-ROOMNEXTTOFINALBOSS	EQU	9
+; Room tiles
+HORIZONTALWALL1	EQU	1
+HORIZONTALWALL2	EQU	2
+FLOOR			EQU	3
+KEYDOOR			EQU	4
 
+; Noticable room
+FINALBOSSROOM	EQU	8
+
+; Skip a room to get to the next one
+SKIPROOM	EQU	66
 
 ; -------------------------------------------------------------------
 CODESEG
@@ -617,7 +625,21 @@ PROC armorPickedUp
 ENDP armorPickedUp
 
 PROC keyPickedUp
-ret
+	USES	ebx, ecx
+	mov ebx, offset rooms
+	mov ecx, FINALBOSSROOM
+	
+	@@getToRoomNextToFinalBoss:
+		add ebx, SKIPROOM
+		loop @@getToRoomNextToFinalBoss
+	
+	add ebx, 26 		; get to first tile
+	mov [ebx], FLOOR	; change to floor
+	
+	add ebx, 10			; get to second tile
+	mov [ebx], FLOOR	; change to floor
+	
+	ret
 ENDP keyPickedUp
 
 ;;;;--------------------------------------------------------
@@ -769,8 +791,8 @@ DATASEG
 			DB 9, 8, 0, 6, 0, 0
 			DB 1,2,1,2,3,3,1,2,1,2
 			DB 2,3,3,3,3,3,3,3,3,1
-			DB 3,3,3,3,3,3,3,3,3,2
-			DB 3,3,3,3,3,3,3,3,3,1
+			DB 4,3,3,3,3,3,3,3,3,2
+			DB 4,3,3,3,3,3,3,3,3,1
 			DB 1,3,3,3,3,3,3,3,3,2
 			DB 2,1,2,1,2,1,2,1,2,1
 

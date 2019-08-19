@@ -10,8 +10,10 @@ GLOBAL	background:WORD, \
 		horizontalWall:WORD, \
 		horizontalWall2:WORD, \
 		floor:WORD, \
+		keydoor:WORD, \
 		armor:WORD, \
 		damageBoost:WORD, \
+		key:WORD, \
 		_start:WORD, \
 		_exit:WORD, \
 		_back:WORD, \
