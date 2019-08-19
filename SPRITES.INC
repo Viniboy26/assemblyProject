@@ -10,7 +10,7 @@ GLOBAL	background:WORD, \
 		horizontalWall:WORD, \
 		horizontalWall2:WORD, \
 		floor:WORD, \
-		rooms:BYTE, \
+		keydoor:WORD, \
 		_start:WORD, \
 		_exit:WORD, \
 		_back:WORD, \
