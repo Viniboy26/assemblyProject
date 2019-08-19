@@ -86,6 +86,9 @@ RESUME 	EQU	1
 ARMOR		EQU	1
 DMGBOOST	EQU	2
 
+; Room the player starts in
+STARTROOM	EQU	1
+
 ;;;;---------------------------------------------------------------------------------------------------
 
 CODESEG
@@ -997,9 +1000,9 @@ PROC returnToMenu
 	call drawSprite, 140, 80, offset _start, offset screenBuffer
 	call drawSprite, 140, 105, offset _exit, offset screenBuffer
 	call updateVideoBuffer, offset screenBuffer
-	call resetPlayer
 	call selectOption, offset gamepaused, FALSE
 	call selectOption, offset gamestarted, FALSE
+	call resetAll
 	call wait_VBLANK, 3
 	ret
 ENDP returnToMenu
@@ -1436,6 +1439,20 @@ ENDP moveObject
 
 ;;;;---------------------------------------------------------------------------------------------------
 
+;; Procedure to reset everything
+
+PROC resetAll
+	USES	ebx
+	
+	mov ebx, offset currentRoom
+	mov [ebx], STARTROOM
+	call resetPlayer
+	ret
+ENDP resetAll
+
+
+;;;;---------------------------------------------------------------------------------------------------
+
 ;; MAIN method
 
 PROC main
@@ -1569,7 +1586,7 @@ ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
-	currentRoom		dw 1	; room the player is in
+	currentRoom		dw STARTROOM	; room the player is in
 	
 	gamestarted		db 0	; boolean to test if game has started
 	

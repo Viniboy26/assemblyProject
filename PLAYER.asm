@@ -27,6 +27,13 @@ BASESHOOT	EQU	0
 BASEDMG		EQU	20
 BASEARMOR	EQU	0
 
+; Base values of final boss
+FINALBOSSXPOS	EQU	150
+FINALBOSSYPOS	EQU	120
+FINALBOSSDIR	EQU	0
+FINALBOSSCOLL	EQU	1
+FINALBOSSLIVES	EQU	250
+
 ; Indexes of character information in "playerdata" array
 CHARXPOS	EQU 1	; character begin x-position
 CHARYPOS	EQU 2	; character begin y-position
@@ -593,6 +600,28 @@ ENDP armorPickedUp
 
 ;;;;--------------------------------------------------------
 
+;; Final Boss management
+
+PROC finalBossDies
+	USES	edx
+
+	call vectorref, offset finalboss, ELEMCOLLISION
+	cmp edx, FALSE
+	je	@@actuallyDies
+	; if elemcollision is TRUE, the final boss actually revives but we decrease elemcollision by 1
+	dec edx
+	call vectorset, offset finalboss, ELEMCOLLISION, edx
+	call vectorset, offset finalboss, ELEMLIVES, FINALBOSSLIVES
+	jmp @@return
+	
+	@@actuallyDies: ; if elemcollision is false, the final boss actually dies
+		call vectorset, offset finalboss, ELEMALIVE, FALSE
+	@@return:
+		ret
+ENDP finalBossDies
+
+;;;;--------------------------------------------------------
+
 DATASEG
 	originalKeyboardHandlerS	dw ?			; SELECTOR of original keyboard handler
 	originalKeyboardHandlerO	dd ?			; OFFSET of original keyboard handler
@@ -645,8 +674,8 @@ DATASEG
 					
 	finalboss		dw	1, 6
 	
-							
-					dw		1	
+							; alive,		x-pos, 			y-pos,			direction,		collision?, 	lives
+					dw		TRUE,			FINALBOSSXPOS,	FINALBOSSYPOS,	FINALBOSSDIR,	FINALBOSSCOLL,	FINALBOSSLIVES
 
 					
 					

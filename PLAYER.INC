@@ -32,3 +32,6 @@ GLOBAL	deletePickup:PROC, \
 		dmgBoostPickedUp:PROC, \
 		armorPickedUp:PROC, \
 		pickups:WORD
+		
+GLOBAL	finalBossDies:PROC, \
+		finalboss:WORD
