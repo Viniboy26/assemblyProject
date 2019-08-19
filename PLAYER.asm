@@ -655,18 +655,18 @@ DATASEG
 					
 	pickups			dw	11,	6	; amount of pickups, amount of information per pickup
 	
-							; alive, x-pos, y-pos,	direction,	effect,		room
-					dw		1,		150,		120,		0,			2,			2
-					dw		1,		110,		80,		0,			2,			4
-					dw		1,		150,		120,		0,			1,			4
-					dw		1,		120,		130	,		0,			1,			6
-					dw		1,		0,		0,		0,			2,			7
-					dw		1,		0,		0,		0,			1,			9
-					dw		1,		0,		0,		0,			1,			10
-					dw		1,		0,		0,		0,			2,			11
-					dw		1,		0,		0,		0,			2,			13
-					dw		1,		0,		0,		0,			1,			14
-					dw		1,		0,		0,		0,			1,			16
+							; alive, 	x-pos, 	y-pos,			direction,	effect,		room
+					dw		1,			150,		120,		0,			2,			2
+					dw		1,			110,		80,			0,			2,			4
+					dw		1,			150,		120,		0,			1,			4
+					dw		1,			120,		130,		0,			1,			6
+					dw		1,			95,			80,			0,			2,			7
+					dw		1,			100,		150,		0,			1,			9
+					dw		1,			75,			100,		0,			1,			10
+					dw		1,			65,			95,			0,			2,			11
+					dw		1,			130,		110,		0,			2,			13
+					dw		1,			90,			105,		0,			1,			14
+					dw		1,			140,		115,		0,			1,			16
 					
 	finalboss		dw	1, 6
 	
