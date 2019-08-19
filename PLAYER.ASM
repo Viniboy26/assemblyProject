@@ -725,7 +725,7 @@ DATASEG
 					dw		1,		BASEENEMY1X,		BASEENEMY1Y,		DOWN,			1,			BASEENEMYLIVES
 					dw		1,		BASEENEMY2X,	    BASEENEMY2Y,	    LEFT,			1,			BASEENEMYLIVES
 					
-	pickups			dw	12,	12	; amount of pickups, amount of information in bytes per pickup
+	pickups			dw	13,	12	; amount of pickups, amount of information in bytes per pickup
 	
 							; alive, 	x-pos, 		y-pos,		direction,	effect,		room
 					dw		1,			150,		120,		0,			2,			2
@@ -741,6 +741,8 @@ DATASEG
 					dw		1,			140,		115,		0,			1,			16
 						; unique key:
 					dw		1,			150,		120,		0,			3,			7
+						; unique chest:
+					dw		1,			150,		120,		0,			4,			8
 					
 					
 							;	number, leftside, rightside, upside, downside, doors open?

@@ -69,7 +69,7 @@ ELEMDIR			EQU	4
 ELEMCOLLISION	EQU	5
 ELEMLIVES		EQU	6
 
-ENEMYSPEED	    EQU 3
+ENEMYSPEED	    EQU 0
 
 ; number of keys to track
 KEYCNT EQU 89
@@ -94,6 +94,7 @@ PICKUPROOM		EQU	6	; room that the object is in
 ARMOR		EQU	1
 DMGBOOST	EQU	2
 KEY			EQU	3
+CHEST       EQU 4
 
 ; Noticable rooms
 STARTROOM		EQU	1
@@ -465,17 +466,22 @@ PROC pickupCollisionWithPlayer
 		je @@armorPickup
 		cmp dx, KEY
 		je @@keyPickup
+		cmp dx, CHEST
+		je @@chestPickup
 		; It's a dmgboost pickup if it was nor KEY nor ARMOR
 		call dmgBoostPickedUp
 		jmp @@pickItUp
 		
 	@@armorPickup:
-	call armorPickedUp
-	jmp @@pickItUp
+		call armorPickedUp
+		jmp @@pickItUp
 	
 	@@keyPickup:
 		call keyPickedUp
 		jmp @@pickItUp
+		
+	@@chestPickup:
+		call returnToMenu
 		
 	@@pickItUp:
 		call vectorset, offset pickups, [@@pickup], ELEMALIVE, FALSE
@@ -483,6 +489,7 @@ PROC pickupCollisionWithPlayer
 	@@return:
 	ret
 ENDP pickupCollisionWithPlayer
+
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -540,7 +547,6 @@ PROC enemyCollisionWithBlock
 	jmp @@return
 	
 	@@collides:
-		call enemyChangeDirection, [@@enemy]
 		call vectorref, offset enemies, [@@enemy], ELEMDIR
 		cmp dx, LEFT
 		je @@setToRightOfBlock
@@ -562,6 +568,7 @@ PROC enemyCollisionWithBlock
 		mov eax, [ebx]					; eax is now the block's width
 		add ax, [@@blockXpos]			; eax is now the blokc's xpos + width
 		call vectorset, offset enemies, [@@enemy], ELEMXPOS, eax
+		call enemyChangeDirection, [@@enemy]
 		jmp @@return
 		
 	; charxpos = block's xpos - char's width
@@ -570,20 +577,23 @@ PROC enemyCollisionWithBlock
 		mov ax, [@@blockXpos]
 		sub ax, [edi]
 		call vectorset, offset enemies, [@@enemy], ELEMXPOS, eax
+		call enemyChangeDirection, [@@enemy]
 		jmp @@return
 		
 	@@setToBottomOfBlock:
 		xor eax, eax
 		mov ax, [@@blockYpos]
 		add ax, [edi + 2]
-		call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		;call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		call enemyChangeDirection, [@@enemy]
 		jmp @@return
 		
 	@@setToTopOfBlock:
 		xor eax, eax
 		mov ax, [@@blockYpos]
 		sub ax, [edi + 2]
-		call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		;call vectorset, offset enemies, [@@enemy], ELEMYPOS, eax
+		call enemyChangeDirection, [@@enemy]
 		
 	@@return:
 		ret
@@ -1609,6 +1619,8 @@ PROC handlePickups
 		je	@@drawArmor
 		cmp edx, KEY
 		je	@@drawKey
+		cmp edx, CHEST
+		je	@@drawChest
 			push eax
 			xor edx, edx
 			call getPlayerData, CHARXPOS
@@ -1640,6 +1652,17 @@ PROC handlePickups
 			call pickupCollisionWithPlayer, ecx, eax, edx, offset key, offset character
 			pop eax
 			call drawSprite, eax, ebx, offset key, offset screenBuffer
+			jmp @@next
+		@@drawChest:
+			push eax
+			xor edx, edx
+			call getPlayerData, CHARXPOS
+			mov eax, edx
+			call getPlayerData, CHARYPOS
+			; Collide with the pickup
+			call pickupCollisionWithPlayer, ecx, eax, edx, offset chest, offset character
+			pop eax
+			call drawSprite, eax, ebx, offset chest, offset screenBuffer
 			jmp @@next
 	
 		
@@ -1741,7 +1764,7 @@ ENDP handleSprites
 
 
 PROC moveObject
-	ARG		@@array:dword, @@element:dword, @@speed:word, @@direction:byte
+	ARG		@@array:dword, @@element:dword, @@speed:dword, @@direction:byte
 	USES 	eax, edx
 	
 	; store the x-position of the element in eax
@@ -1763,22 +1786,22 @@ PROC moveObject
 	je @@moveDown
 	
 	@@moveLeft:
-		sub ax, [@@speed]
+		sub eax, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMXPOS, ax
 		jmp @@return
 		
 	@@moveRight:
-		add ax, [@@speed]
+		add eax, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMXPOS, ax
 		jmp @@return
 		
 	@@moveUp:
-		sub dx, [@@speed]
+		sub edx, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMYPOS, dx
 		jmp @@return
 		
 	@@moveDown:
-		add dx, [@@speed]
+		add edx, [@@speed]
 		call vectorset, [@@array], [@@element], ELEMYPOS, dx
 		jmp @@return
 	
