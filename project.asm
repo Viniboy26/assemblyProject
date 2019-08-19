@@ -37,7 +37,7 @@ UP			EQU 3
 DOWN		EQU 4
 
 ; character constants
-CHARSPEED	EQU 6	
+CHARSPEED	EQU 4	
 CHARWIDTH	EQU 25	; character width
 CHARHEIGHT	EQU 25	; character height
 CHARCOLOR	EQU 40 	; character color
@@ -67,10 +67,6 @@ ELEMDIR			EQU	4
 ELEMCOLLISION	EQU	5
 ELEMLIVES		EQU	6
 
-; Indexes of gamedata information in "objects" vector
-PICKUPEFFECT	EQU	5	; effect that the object has upon picking it up
-PICKUPROOM		EQU	6	; room that the object is in
-
 ; number of keys to track
 KEYCNT EQU 89
 
@@ -86,9 +82,16 @@ NEXT	EQU	1
 RESUME 	EQU	1
 ; EXIT EQU 2 is already defined
 
+; Indexes of gamedata information in "objects" vector
+PICKUPEFFECT	EQU	5	; effect that the object has upon picking it up
+PICKUPROOM		EQU	6	; room that the object is in
+
 ; Effects of pickups
 ARMOR		EQU	1
 DMGBOOST	EQU	2
+
+; Room the player starts in
+STARTROOM	EQU	1
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -387,7 +390,6 @@ ENDP testProjectileCollision
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-
 ;; Pickup collision management
 
 
@@ -446,11 +448,13 @@ PROC pickupCollisionWithPlayer
 		cmp dx, ARMOR
 		je @@armorPickup
 		; It's a dmgboost pickup
+		call dmgBoostPickedUp
 		
 		
 		jmp @@pickItUp
 		
 	@@armorPickup:
+	call armorPickedUp
 		
 	@@pickItUp:
 		call vectorset, offset pickups, [@@pickup], ELEMALIVE, FALSE
@@ -461,10 +465,7 @@ ENDP pickupCollisionWithPlayer
 
 ;;;;---------------------------------------------------------------------------------------------------
 
-
 ;; Enemy collision management 
-
-
 
 ; Test if a enemy collides with a block
 PROC enemyCollisionWithBlock
@@ -1078,9 +1079,9 @@ PROC returnToMenu
 	call drawSprite, 140, 80, offset _start, offset screenBuffer
 	call drawSprite, 140, 105, offset _exit, offset screenBuffer
 	call updateVideoBuffer, offset screenBuffer
-	call resetPlayer
 	call selectOption, offset gamepaused, FALSE
 	call selectOption, offset gamestarted, FALSE
+	call resetAll
 	call wait_VBLANK, 5
 	ret
 ENDP returnToMenu
@@ -1534,6 +1535,20 @@ ENDP moveObject
 
 ;;;;---------------------------------------------------------------------------------------------------
 
+;; Procedure to reset everything
+
+PROC resetAll
+	USES	ebx
+	
+	mov ebx, offset currentRoom
+	mov [ebx], STARTROOM
+	call resetPlayer
+	ret
+ENDP resetAll
+
+
+;;;;---------------------------------------------------------------------------------------------------
+
 ;; MAIN method
 
 PROC main
@@ -1592,14 +1607,13 @@ PROC main
 		call	drawRoom, offset rooms
 	
 		call	handleSprites, offset projectiles, offset stone
-		call	handleSprites, offset enemies, offset character
-		; call	handleSprites, offset pickups, offset damageBoost
+		call	handleSprites, offset enemies, offset enemy
+		
+		; Handle everything concerning the pickups
+		call	handlePickups
 		
 		; Handle everything concerning the player
 		call handlePlayer
-		
-		; Handle everything concerning the pickups
-		call handlePickups
 		
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
@@ -1668,7 +1682,7 @@ ENDP main
 
 ; -------------------------------------------------------------------
 DATASEG
-	currentRoom		dw 1	; room the player is in
+	currentRoom		dw STARTROOM	; room the player is in
 	
 	gamestarted		db 0	; boolean to test if game has started
 	

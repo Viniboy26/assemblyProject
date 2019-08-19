@@ -4,6 +4,7 @@ GLOBAL	updateVideoBuffer:PROC
 GLOBAL	background:WORD, \
 		backgrounds:WORD, \
 		character:WORD, \
+		enemy:WORD, \
 		heart:WORD, \
 		stone:WORD, \
 		horizontalWall:WORD, \
@@ -12,7 +13,7 @@ GLOBAL	background:WORD, \
 		rooms:BYTE, \
 		_start:WORD, \
 		_exit:WORD, \
+		_back:WORD, \
 		menu:WORD, \
-		back:WORD, \
 		armor:WORD, \
 		damageBoost:WORD
