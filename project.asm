@@ -82,6 +82,10 @@ NEXT	EQU	1
 RESUME 	EQU	1
 ; EXIT EQU 2 is already defined
 
+; Indexes of gamedata information in "objects" vector
+PICKUPEFFECT	EQU	5	; effect that the object has upon picking it up
+PICKUPROOM		EQU	6	; room that the object is in
+
 ; Effects of pickups
 ARMOR		EQU	1
 DMGBOOST	EQU	2
@@ -383,6 +387,79 @@ PROC testProjectileCollision
 	@@return:
 		ret
 ENDP testProjectileCollision
+
+;;;;---------------------------------------------------------------------------------------------------
+
+;; Pickup collision management
+
+
+; Test if a pickup is colliding with player
+PROC pickupCollisionWithPlayer
+	ARG		@@pickup:dword, @@playerXpos:dword, @@playerYpos:dword, @@sprite:dword, @@playerSprite:dword
+	USES 	eax, ebx, ecx, edx, edi
+	
+	xor edi, edi
+	xor ecx,ecx
+	
+	mov edi, [@@sprite]  ; pickup
+	mov cl, [edi]        ; pickup's width
+	
+	; test if charxpos + width > pickup xpos
+	call vectorref, offset pickups, [@@pickup], ELEMXPOS
+	add dl, cl					; pickup xpos + width
+	cmp edx, [@@playerXpos]
+	jg @@test2
+	jmp @@return
+	
+	; test if the pickupxpos is lesser then the player's xpos + width
+	@@test2:
+	xor eax,eax
+	mov ebx, [@@playerSprite]		; the block sprite is stored in ebx
+	mov eax, [ebx]					; eax is now the player's width
+	add eax, [@@playerXpos]			; eax is now the player's xpos + width
+	call vectorref, offset pickups, [@@pickup], ELEMXPOS
+	cmp dx, ax
+	jl @@test3
+	jmp @@return
+	
+	; test if the pickup's ypos + it's height is greater then the player's ypos
+	@@test3:
+	xor eax, eax
+	mov al, [edi + 2]				; player-height (stored in eax)
+	call vectorref, offset pickups, [@@pickup], ELEMYPOS
+	add dl, al					; edx is now the ELEMYPOS + it's height
+	cmp edx, [@@playerYpos]
+	jg @@test4
+	jmp @@return
+	
+	; test if the ELEMYPOS is lesser then the block's ypos + the block's height
+	@@test4:
+	xor eax,eax
+	mov eax, [ebx + 2]
+	add eax, [@@playerYpos]
+	call vectorref, offset pickups, [@@pickup], ELEMYPOS
+	cmp dx, ax
+	jl @@collides
+	jmp @@return
+	
+	@@collides:
+		xor edx,edx
+		call vectorref, offset pickups, [@@pickup], PICKUPEFFECT
+		cmp dx, ARMOR
+		je @@armorPickup
+		; It's a dmgboost pickup
+		
+		
+		jmp @@pickItUp
+		
+	@@armorPickup:
+		
+	@@pickItUp:
+		call vectorset, offset pickups, [@@pickup], ELEMALIVE, FALSE
+	
+	@@return:
+	ret
+ENDP pickupCollisionWithPlayer
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1294,19 +1371,36 @@ PROC handlePickups
 	jmp @@return
 			
 	@@draw:
-		xor edx, edx
-		call vectorref, offset pickups, ecx, ELEMXPOS
-		mov eax, edx	; store x-position of pickup in eax
+ 		call vectorref, offset pickups, ecx, ELEMXPOS
+		mov eax, edx									; store x-position of pickup in eax
 		call vectorref, offset pickups, ecx, ELEMYPOS
-		mov ebx, edx	; store y-position of pickup in ebx
-		call getPickupEffect, ecx		; store effect of pickup in edx
+		mov ebx, edx									; store y-position of pickup in ebx
+		call getPickupEffect, ecx						; store effect of pickup in edx
 		cmp edx, ARMOR
-		je	@@drawArmor
-		call drawSprite, eax, ebx, offset damageBoost, offset screenBuffer
+		je	@@drawArmor			
+			push eax
+			xor edx, edx
+			call getPlayerData, CHARXPOS
+			mov eax, edx
+			call getPlayerData, CHARYPOS
+			; Collide with the pickup
+			call pickupCollisionWithPlayer, ecx, eax, edx, offset damageBoost, offset character
+			pop eax
+			call drawSprite, eax, ebx, offset damageBoost, offset screenBuffer
 		jmp @@next
-		@@drawArmor:
+		@@drawArmor:		
+			push eax
+			xor edx, edx
+			call getPlayerData, CHARXPOS
+			mov eax, edx
+			call getPlayerData, CHARYPOS
+			; Collide with the pickup
+			call pickupCollisionWithPlayer, ecx, eax, edx, offset armor, offset character
+			pop eax
 			call drawSprite, eax, ebx, offset armor, offset screenBuffer
 			jmp @@next
+			
+	
 		
 	@@return:
 		ret
