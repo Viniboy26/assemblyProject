@@ -448,11 +448,13 @@ PROC pickupCollisionWithPlayer
 		cmp dx, ARMOR
 		je @@armorPickup
 		; It's a dmgboost pickup
+		call dmgBoostPickedUp
 		
 		
 		jmp @@pickItUp
 		
 	@@armorPickup:
+	call armorPickedUp
 		
 	@@pickItUp:
 		call vectorset, offset pickups, [@@pickup], ELEMALIVE, FALSE
