@@ -36,3 +36,5 @@ GLOBAL	deletePickup:PROC, \
 		
 GLOBAL	finalBossDies:PROC, \
 		finalboss:WORD
+		
+GLOBAL	rooms:BYTE

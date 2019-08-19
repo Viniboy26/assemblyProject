@@ -43,9 +43,8 @@ CHARSHOOT	EQU	5	; boolean, test if charater is shooting
 CHARDMG		EQU	6	; character's damage towards enemies
 CHARARMOR	EQU	7	; character's
 
-; Amount of bytes to skip in a vector to get to either the next element or the next piece of information of an element
+; Amount of bytes to skip in a vector to get to the next piece of information of an element
 ; vectors are arrays that are made out of an arbitrary number of elements each containing 6 pieces of information as Double Words
-NEXTELEMENT	EQU 12	; get to next element of a vector
 NEXTINFO	EQU 2	; get to next piece of information of an element
 
 ; Indexes of gamedata information in "projectiles" and "enemies" vector
@@ -63,9 +62,13 @@ PICKUPROOM		EQU	6	; room that the object is in
 ; Effects of pickups
 ARMOR		EQU	1
 DMGBOOST	EQU	2
+KEYB		EQU	3	
 
 ; Upon collecting a pickup
 EXTRADMG	EQU	8
+
+; Noticable room
+ROOMNEXTTOFINALBOSS	EQU	9
 
 
 ; -------------------------------------------------------------------
@@ -276,17 +279,19 @@ ENDP resetPlayer
 ; Get the information from an element from an array containing game data
 PROC vectorref
 	ARG		@@array:dword, @@element: dword, @@information:dword	RETURNS	edx
-	USES	ebx, ecx
+	USES	eax, ebx, ecx
 	
 	mov ebx, [@@array]
 	add ebx, NEXTINFO	; skip amount of elements and information per element
+	xor eax, eax
+	mov al, [ebx]
 	mov ecx, [@@element]
 	dec ecx
 	cmp ecx, 0
 	je @@elementzero
 	
 	@@getToElement:
-		add ebx, NEXTELEMENT 	; go to next element
+		add ebx, eax 			; go to next element
 		loop @@getToElement 	; loop until the correct element is reached
 		
 	@@elementzero:
@@ -299,23 +304,25 @@ PROC vectorref
 	
 	xor edx, edx
 	mov dx, [ebx]
-	ret	
+	ret		
 ENDP vectorref
 
 ; Set a piece of information from an element from an array to a different value
 PROC vectorset
 	ARG		@@array:dword, @@element:dword, @@information:dword, @@newvalue:word
-	USES	ebx, ecx
+	USES	eax, ebx, ecx
 	
 	mov ebx, [@@array]
 	add ebx, NEXTINFO	; skip amount of elements and information per element
+	xor eax, eax
+	mov al, [ebx]
 	mov ecx, [@@element]
 	dec ecx
 	cmp ecx, 0
 	je @@elementzero
 	
 	@@getToElement:
-		add ebx, NEXTELEMENT 	; go to next element
+		add ebx, eax 			; go to next element
 		loop @@getToElement 	; loop until the correct element is reached
 		
 	@@elementzero:
@@ -587,11 +594,17 @@ ENDP getPickupEffect
 PROC dmgBoostPickedUp
 	USES	edx
 	
+	call getPlayerData, CHARLIVES
+	cmp edx, 1
+	je	@@return	; if the player only has one heart left, the item has no effect (but will still be picked up and dissapear)
+	xor edx, edx
 	call decreaseHealth
 	call getPlayerData, CHARDMG
 	add edx, EXTRADMG
 	call setPlayerData, CHARDMG, edx
-	ret
+	
+	@@return:
+		ret
 ENDP dmgBoostPickedUp
 
 PROC armorPickedUp
@@ -602,6 +615,10 @@ PROC armorPickedUp
 	call setPlayerData, CHARARMOR, edx
 	ret
 ENDP armorPickedUp
+
+PROC keyPickedUp
+ret
+ENDP keyPickedUp
 
 ;;;;--------------------------------------------------------
 
@@ -619,7 +636,7 @@ PROC finalBossDies
 	call vectorset, offset finalboss, ELEMLIVES, FINALBOSSLIVES
 	jmp @@return
 	
-	@@actuallyDies: ; if elemcollision is false, the final boss actually dies
+	@@actuallyDies: ; if elemcollision is FALSE, the final boss actually dies
 		call vectorset, offset finalboss, ELEMALIVE, FALSE
 	@@return:
 		ret
@@ -642,7 +659,7 @@ DATASEG
 	
 	;; vectors:
 	
-	projectiles		dw 	10, 6	; amount of projectiles, amount of information per projectile
+	projectiles		dw 	10, 12	; amount of projectiles, amount of information in bytes per projectile
 							
 							; alive, x-pos, y-pos,	direction,	collision?	lives
 					dw		0,		0,		0,		0,			1,			1
@@ -656,13 +673,13 @@ DATASEG
 					dw		0,		0,		0,		0,			1,			1
 					dw		0,		0,		0,		0,			1,			1
 					
-	enemies			dw	2,	6	; amount of enemies, amount of information per enemy
+	enemies			dw	2,	12	; amount of enemies, amount of information in bytes per enemy
 	
 							; alive, x-pos, y-pos,	direction,	collision?	lives
 					dw		1,		50,		80,		0,			1,			80
 					dw		1,		220,	150,	0,			1,			80
 					
-	pickups			dw	11,	6	; amount of pickups, amount of information per pickup
+	pickups			dw	12,	12	; amount of pickups, amount of information in bytes per pickup
 	
 							; alive, 	x-pos, 		y-pos,		direction,	effect,		room
 					dw		1,			150,		120,		0,			2,			2
@@ -676,11 +693,142 @@ DATASEG
 					dw		1,			130,		110,		0,			2,			13
 					dw		1,			90,			105,		0,			1,			14
 					dw		1,			140,		115,		0,			1,			16
+						; unique key:
+					dw		1,			150,		120,		0,			3,			7
 					
-	finalboss		dw	1, 6
+	finalboss		dw	1, 12
 	
 							; alive,		x-pos, 			y-pos,			direction,		collision?, 	lives
 					dw		TRUE,			FINALBOSSXPOS,	FINALBOSSYPOS,	FINALBOSSDIR,	FINALBOSSCOLL,	FINALBOSSLIVES
+					
+							;	number, leftside, rightside, upside, downside, doors open?
+	rooms	DB 1, 0, 2, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+			
+			DB 2, 1, 0, 0, 5, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+			
+			DB 3, 0, 0, 10, 6, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,1,2,1,1
+
+			DB 4, 0, 5, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 5, 4, 6, 2, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 6, 5, 0, 3, 9, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,1,2,1,1
+
+			DB 7, 16, 0, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 8, 0, 9, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 9, 8, 0, 6, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 10, 11, 0, 0, 3, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,2
+			DB 3,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+
+			DB 11, 12, 10, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 12, 13, 11, 0, 0, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 3,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
+
+			DB 13, 0, 12, 0, 14, 0
+			DB 1,2,1,2,1,2,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+
+			DB 14, 0, 0, 13, 15, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1	
+			
+			DB 15, 0, 0, 14, 16, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,3,3,2,1,2,1
+			
+			DB 16, 0, 7, 15, 0, 0
+			DB 1,2,1,2,3,3,1,2,1,2
+			DB 2,3,3,3,3,3,3,3,3,1
+			DB 1,3,3,3,3,3,3,3,3,3
+			DB 2,3,3,3,3,3,3,3,3,3
+			DB 1,3,3,3,3,3,3,3,3,2
+			DB 2,1,2,1,2,1,2,1,2,1
 
 					
 					

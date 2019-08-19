@@ -49,7 +49,7 @@ CHARLIVES	EQU 3 	; number of lives character has
 CHARDIR		EQU 4	; character's direction
 CHARSHOOT	EQU	5	; boolean, test if charater is shooting
 CHARDMG		EQU	6	; character's damage towards enemies
-CHARARMOR	EQU	7	; character's
+CHARARMOR	EQU	7	; character's armor
 
 
 ; projectile constants
@@ -91,10 +91,19 @@ PICKUPROOM		EQU	6	; room that the object is in
 ; Effects of pickups
 ARMOR		EQU	1
 DMGBOOST	EQU	2
+KEY			EQU	3
 
 ; Noticable rooms
 STARTROOM		EQU	1
 FINALBOSSROOM	EQU	8
+
+; Room tiles
+HORIZONTALWALL1	EQU	1
+HORIZONTALWALL2	EQU	2
+FLOOR			EQU	3
+
+; Skip a room to get to the next one
+SKIPROOM	EQU	66
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -171,7 +180,7 @@ ENDP drawRectangle
 ;; Player management
 
 PROC handlePlayer
-	USES eax, ebx, ecx, edx
+	USES eax, ecx, edx
 	
 	; Test if character remains in screen boundary
 	call testBoarders, offset character
@@ -200,7 +209,9 @@ PROC handlePlayer
 	jmp @@return									; after setting gamestarted to 0 return out of the function
 	
 	@@stillAlive:
-	call 	drawNSprites, 2, 2, ecx, 2, offset heart ; draw remaining lives	
+	call drawHearts, ecx
+	call getPlayerData, CHARARMOR
+	call drawArmor, edx
 	
 	@@return:
 		ret	
@@ -213,15 +224,18 @@ ENDP handlePlayer
 PROC handleFinalBoss
 	USES	eax, ebx, ecx, edx
 	
-	mov ebx, offset currentRoom
-	cmp [ebx], FINALBOSSROOM
+	xor ebx, ebx
+	mov bx, [offset currentRoom]
+	cmp ebx, FINALBOSSROOM
 	jne	@@return	; if we are not in the final boss room then skip everything
 	
 	mov ebx, offset finalboss
-	mov cx, [ebx]
+	mov ecx, [ebx]
 	call vectorref, offset finalboss, ecx, ELEMXPOS
+	xor eax, eax
 	mov eax, edx
 	call vectorref, offset finalboss, ecx, ELEMYPOS
+	xor ebx, ebx
 	mov ebx, edx
 	call drawSprite, eax, ebx, offset character, offset screenBuffer
 	
@@ -473,14 +487,18 @@ PROC pickupCollisionWithPlayer
 		call vectorref, offset pickups, [@@pickup], PICKUPEFFECT
 		cmp dx, ARMOR
 		je @@armorPickup
-		; It's a dmgboost pickup
+		cmp dx, KEY
+		je @@keyPickup
+		; It's a dmgboost pickup if it was nor KEY nor ARMOR
 		call dmgBoostPickedUp
-		
-		
 		jmp @@pickItUp
 		
 	@@armorPickup:
 	call armorPickedUp
+	jmp @@pickItUp
+	
+	@@keyPickup:
+	
 		
 	@@pickItUp:
 		call vectorset, offset pickups, [@@pickup], ELEMALIVE, FALSE
@@ -760,7 +778,7 @@ PROC getRoomDoorID
 	je @@room1
 	
 	@@getToRoomIndex:
-		add ebx, 66
+		add ebx, SKIPROOM
 		loop @@getToRoomIndex
 		
 	@@room1:
@@ -815,16 +833,16 @@ PROC drawRoom
 			push eax
 			mov al, [ebx]	; The sprite that has to be drawn
 			
-			cmp al, 0
-			je @@endcolLoop	; draw no sprite if 0
+			cmp al, FALSE
+			je @@endcolLoop	; draw no sprite if FALSE
 			
-			cmp al, 1
+			cmp al, HORIZONTALWALL1
 			je @@drawHorWall	; draw horizontallWall if 1
 			
-			cmp al, 2
+			cmp al, HORIZONTALWALL2
 			je @@drawHorWall2
 			
-			cmp al, 3
+			cmp al, FLOOR
 			je @@drawFloor
 			
 			jmp @@endcolLoop
@@ -1355,26 +1373,6 @@ ENDP terminateProcess
 
 ;; Drawing management
 
-
-PROC drawBackground
-	USES 	eax, ebx, ecx, edx, edi
-	
-	xor ecx,ecx
-	xor ebx,ebx
-	xor eax,eax
-	xor edi,edi
-	
-	mov ebx, 50
-	mov ecx, 6		; store the number of rows in ecx
-	
-	@@rowLoop:
-		call drawNSprites, 0, ebx, 10, 0, offset background
-		add ebx, 25
-		loop @@rowLoop
-		
-	ret
-ENDP drawBackground
-
 PROC handlePickups
 	USES	eax, ebx, ecx, edx
 	
@@ -1445,15 +1443,29 @@ PROC drawNSprites
 	mov edi, [@@sprite]
 	
 	movzx ecx, [@@nSprites]		; total sprites to print
+	cmp ecx, 0
+	je	@@return
 	
 	@loop:
 		call drawSprite, ebx, edx, [@@sprite], offset screenBuffer
 		add ebx, [edi]
 		add ebx, eax
 		loop @loop
-		
-	ret
+	@@return:
+		ret
 ENDP drawNSprites
+
+PROC drawHearts
+	ARG		@@amount:dword
+	call 	drawNSprites, 2, 2, [@@amount], 2, offset heart ; draw remaining lives	
+	ret
+ENDP drawHearts
+
+PROC drawArmor
+	ARG		@@amount:dword
+	call	drawNSprites, 2, 12, [@@amount], 2, offset armor
+	ret
+ENDP drawArmor
 
 PROC handleSprites
 	ARG		@@data:dword, @@sprite:dword
@@ -1633,7 +1645,7 @@ PROC main
 		call	drawRoom, offset rooms
 	
 		call	handleSprites, offset projectiles, offset stone
-		call	handleSprites, offset enemies, offset character
+		call	handleSprites, offset enemies, offset enemy
 		
 		; Handle everything concerning the pickups
 		call	handlePickups
