@@ -67,6 +67,10 @@ ELEMDIR			EQU	4
 ELEMCOLLISION	EQU	5
 ELEMLIVES		EQU	6
 
+; Indexes of gamedata information in "objects" vector
+PICKUPEFFECT	EQU	5	; effect that the object has upon picking it up
+PICKUPROOM		EQU	6	; room that the object is in
+
 ; number of keys to track
 KEYCNT EQU 89
 
@@ -81,6 +85,10 @@ NEXT	EQU	1
 ; Pause options
 RESUME 	EQU	1
 ; EXIT EQU 2 is already defined
+
+; Effects of pickups
+ARMOR		EQU	1
+DMGBOOST	EQU	2
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -145,7 +153,7 @@ PROC drawRectangle
 		mov	al,[@@col]
 		rep stosb
 		add edi, SCRWIDTH	; set edi to the next line
-		sub edi, edx		; subtract the width so edi is on the left	
+		sub edi, edx		; substract the width so edi is on the left	
 		pop ecx
 		loop @@horloop	
 		
@@ -379,7 +387,84 @@ ENDP testProjectileCollision
 
 ;;;;---------------------------------------------------------------------------------------------------
 
+
+;; Pickup collision management
+
+
+; Test if a pickup is colliding with player
+PROC pickupCollisionWithPlayer
+	ARG		@@pickup:dword, @@playerXpos:dword, @@playerYpos:dword, @@sprite:dword, @@playerSprite:dword
+	USES 	eax, ebx, ecx, edx, edi
+	
+	xor edi, edi
+	xor ecx,ecx
+	
+	mov edi, [@@sprite]  ; pickup
+	mov cl, [edi]        ; pickup's width
+	
+	; test if charxpos + width > pickup xpos
+	call vectorref, offset pickups, [@@pickup], ELEMXPOS
+	add dl, cl					; pickup xpos + width
+	cmp edx, [@@playerXpos]
+	jg @@test2
+	jmp @@return
+	
+	; test if the pickupxpos is lesser then the player's xpos + width
+	@@test2:
+	xor eax,eax
+	mov ebx, [@@playerSprite]		; the block sprite is stored in ebx
+	mov eax, [ebx]					; eax is now the player's width
+	add eax, [@@playerXpos]			; eax is now the player's xpos + width
+	call vectorref, offset pickups, [@@pickup], ELEMXPOS
+	cmp dx, ax
+	jl @@test3
+	jmp @@return
+	
+	; test if the pickup's ypos + it's height is greater then the player's ypos
+	@@test3:
+	xor eax, eax
+	mov al, [edi + 2]				; player-height (stored in eax)
+	call vectorref, offset pickups, [@@pickup], ELEMYPOS
+	add dl, al					; edx is now the ELEMYPOS + it's height
+	cmp edx, [@@playerYpos]
+	jg @@test4
+	jmp @@return
+	
+	; test if the ELEMYPOS is lesser then the block's ypos + the block's height
+	@@test4:
+	xor eax,eax
+	mov eax, [ebx + 2]
+	add eax, [@@playerYpos]
+	call vectorref, offset pickups, [@@pickup], ELEMYPOS
+	cmp dx, ax
+	jl @@collides
+	jmp @@return
+	
+	@@collides:
+		xor edx,edx
+		call vectorref, offset pickups, [@@pickup], PICKUPEFFECT
+		cmp dx, ARMOR
+		je @@armorPickup
+		; It's a dmgboost pickup
+		
+		
+		jmp @@pickItUp
+		
+	@@armorPickup:
+		
+	@@pickItUp:
+		call vectorset, offset pickups, [@@pickup], ELEMALIVE, FALSE
+	
+	@@return:
+	ret
+ENDP pickupCollisionWithPlayer
+
+;;;;---------------------------------------------------------------------------------------------------
+
+
 ;; Enemy collision management 
+
+
 
 ; Test if a enemy collides with a block
 PROC enemyCollisionWithBlock
@@ -463,6 +548,28 @@ PROC testEnemyCollision
 	@@return:
 		ret
 ENDP testEnemyCollision
+
+PROC enemiesMove
+	USES	ebx, ecx, edx
+	
+	mov ebx, offset enemies
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of enemies
+	
+	; find every living enemy and make them move
+	@@findEnemy:
+		call vectorref, offset enemies, ecx, ELEMALIVE
+		cmp edx, FALSE
+		je @@next	; if the enemy is dead, he does not move
+		xor edx, edx
+		call vectorref, offset enemies, ecx, ELEMDIR
+		call moveObject, offset enemies, ecx, edx
+		@@next:
+		loop @@findEnemy
+		
+	@@return:
+		ret
+ENDP enemiesMove
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -606,8 +713,6 @@ PROC testBoarders
 ENDP testBoarders
 
 ;;;;---------------------------------------------------------------------------------------------------
-
-
 
 ;-------------------------------------------------------------------------------------------------
 
@@ -894,6 +999,7 @@ ENDP collisionWithRoom
 
 ;; Pause management
 
+; Determines what to do when a certain key is pressed while the game is paused
 PROC keyboardDuringPause
 	USES ebx, ecx
 	
@@ -972,10 +1078,10 @@ PROC returnToMenu
 	call drawSprite, 140, 80, offset _start, offset screenBuffer
 	call drawSprite, 140, 105, offset _exit, offset screenBuffer
 	call updateVideoBuffer, offset screenBuffer
-	call setPlayerData, CHARLIVES, 6 			; set lives to 3 again for the next game
+	call resetPlayer
 	call selectOption, offset gamepaused, FALSE
 	call selectOption, offset gamestarted, FALSE
-	call wait_VBLANK, 3
+	call wait_VBLANK, 5
 	ret
 ENDP returnToMenu
 
@@ -988,6 +1094,7 @@ PROC pauseGame
 	call selectOption, offset gamepaused, TRUE
 	ret
 ENDP pauseGame
+
 
 ;;;;---------------------------------------------------------------------------------------------------
 
@@ -1219,6 +1326,8 @@ ENDP terminateProcess
 
 ;;;;---------------------------------------------------------------------------------------------------
 
+;; Drawing management
+
 
 PROC drawBackground
 	USES 	eax, ebx, ecx, edx, edi
@@ -1238,6 +1347,65 @@ PROC drawBackground
 		
 	ret
 ENDP drawBackground
+
+PROC handlePickups
+	USES	eax, ebx, ecx, edx
+	
+	mov ebx, offset pickups
+	xor ecx, ecx
+	mov cx, [ebx]	; amount of pickups
+	
+	; find the pickups that are in the room we are in and draw them as long as they were not picked up yet
+	@@findPickup:
+		xor eax, eax
+		xor ebx, ebx
+		call vectorref, offset pickups, ecx, ELEMALIVE
+		cmp	edx, FALSE
+		je @@next
+		call getPickupRoom, ecx		; the room in which the pickup is
+		cmp dx, [offset currentRoom]
+		jne @@next	; if the pickup is in another room, don't draw it
+		jmp @@draw
+		@@next:
+			loop @@findPickup
+			
+	jmp @@return
+			
+	@@draw:
+ 		call vectorref, offset pickups, ecx, ELEMXPOS
+		mov eax, edx									; store x-position of pickup in eax
+		call vectorref, offset pickups, ecx, ELEMYPOS
+		mov ebx, edx									; store y-position of pickup in ebx
+		call getPickupEffect, ecx						; store effect of pickup in edx
+		cmp edx, ARMOR
+		je	@@drawArmor			
+			push eax
+			xor edx, edx
+			call getPlayerData, CHARXPOS
+			mov eax, edx
+			call getPlayerData, CHARYPOS
+			; Collide with the pickup
+			call pickupCollisionWithPlayer, ecx, eax, edx, offset damageBoost, offset character
+			pop eax
+			call drawSprite, eax, ebx, offset damageBoost, offset screenBuffer
+		jmp @@next
+		@@drawArmor:		
+			push eax
+			xor edx, edx
+			call getPlayerData, CHARXPOS
+			mov eax, edx
+			call getPlayerData, CHARYPOS
+			; Collide with the pickup
+			call pickupCollisionWithPlayer, ecx, eax, edx, offset armor, offset character
+			pop eax
+			call drawSprite, eax, ebx, offset armor, offset screenBuffer
+			jmp @@next
+			
+	
+		
+	@@return:
+		ret
+ENDP handlePickups
 
 PROC drawNSprites
 	ARG		@@xpos:word, @@ypos:word, @@nSprites:word, @@gap:word, @@sprite:dword
@@ -1270,7 +1438,7 @@ PROC handleSprites
 	
 	@@findElements:	; find the elements that need to be drawn and draw them
 		call vectorref, [@@data], ecx, ELEMALIVE
-		cmp edx, 0	; if the element isn't alive, don't do anything and skip to next element
+		cmp edx, FALSE	; if the element isn't alive, don't do anything and skip to next element
 		je @@nextElement
 		xor eax, eax
 		
@@ -1329,6 +1497,8 @@ PROC moveObject
 	; get the y-position which is stored in edx
 	call vectorref, [@@array], [@@element], ELEMYPOS
 	
+	cmp [@@direction], STILL
+	je @@return
 	cmp [@@direction], LEFT
 	je @@moveLeft
 	cmp [@@direction], RIGHT
@@ -1395,6 +1565,8 @@ PROC main
 		
 		@@drawExitRectangle:
 			call drawRectangle, 138, 103, 35, 21, 07H
+			
+		jmp @@drawSprites
 		
 		@@drawSprites:
 		pop eax
@@ -1421,17 +1593,18 @@ PROC main
 	
 		call	handleSprites, offset projectiles, offset stone
 		call	handleSprites, offset enemies, offset character
-		
-		call drawSprite, 140, 80, offset damageBoost, offset screenBuffer
+		; call	handleSprites, offset pickups, offset damageBoost
 		
 		; Handle everything concerning the player
 		call handlePlayer
 		
-		; call enemiesFollow
+		; Handle everything concerning the pickups
+		call handlePickups
 		
 		call updateVideoBuffer, offset screenBuffer
 		; test collision for every projectile and enemy
 		call testProjectileCollision
+		;call enemiesMove
 		
 		; test if we died and have to return to the menu
 		mov al, [offset gamestarted] ; upon dying, gamestarted is set to 0
@@ -1477,7 +1650,7 @@ PROC main
 		
 		@@drawPauseSprites:
 		pop eax
-		call drawSprite, 140, 80, offset back, offset screenBuffer
+		call drawSprite, 140, 80, offset _back, offset screenBuffer
 		call drawSprite, 140, 105, offset menu, offset screenBuffer
 		call updateVideoBuffer, offset screenBuffer	; draw pause menu
 		call keyboardDuringPause
